@@ -1094,13 +1094,13 @@ if __name__ == "__main__":
             print(f"Scan summary saved to {summary_file}")
             
             # Final notification
-            completion_msg = f"Scan completed for {target_domain} in {duration_mins:.2f} minutes. Check {results_dir} for results."
+            completion_msg = f"Scan completed for {domain} in {duration_mins:.2f} minutes. Check {results_dir} for results."
             send_telegram(completion_msg, log_file)
         else:
-            msg = f"Scan completed for {target_domain}, but no live URLs with parameters were found."
+            msg = f"Scan completed for {domain}, but no live URLs with parameters were found."
             print(f"[-] {msg}")
             send_telegram(msg, log_file)
     else:
-        msg = f"Scan completed for {target_domain}, but no URLs with parameters were found."
+        msg = f"Scan completed for {domain}, but no URLs with parameters were found."
         print(f"[-] {msg}")
         send_telegram(msg, log_file)
