@@ -201,10 +201,9 @@ def prompt_confirm():
     print(f"{Fore.YELLOW} Ensure you have explicit permission to test the target domain!{Style.RESET_ALL}")
     print(f"{Fore.RED} Unauthorized testing may be illegal in your jurisdiction.{Style.RESET_ALL}")
     print(f"{Fore.YELLOW}{Style.BRIGHT}{'=' * 60}{Style.RESET_ALL}")
-    confirm = input(f"{Fore.CYAN}Do you want to continue? (y/N): {Style.RESET_ALL}").strip().lower()
-    if confirm != "y":
-        print(f"{Fore.RED}Aborted.{Style.RESET_ALL}")
-        sys.exit(0)
+    # Skip confirmation and automatically proceed
+    print(f"{Fore.GREEN}[+] Running in automatic mode - no confirmation required{Style.RESET_ALL}")
+    return True
 
 def run_command(command, cwd=None, timeout=None, retry_count=1, retry_delay=2, show_output=True):
     """
@@ -542,7 +541,8 @@ def scan_with_sqlmap(live_urls_file, output_dir, tamper_scripts=None, level=1, r
         sqlmap_log_file = os.path.join(output_dir, f"sqlmap_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
         
         # Build command with proper argument formatting
-        cmd = ["sqlmap", "-m", live_urls_file, "--batch", "--level", str(level), "--risk", str(risk),
+        # Add --answers to automatically respond to all prompts with 'Y' for fully automatic operation
+        cmd = ["sqlmap", "-m", live_urls_file, "--batch", "--answers=Y", "--level", str(level), "--risk", str(risk),
                "--threads", str(threads)]
         
         # Add options for database enumeration
@@ -901,101 +901,120 @@ def enum_tables_for_db(vulnerable_urls_file, output_dir, db_name, tamper_scripts
     
     except Exception as e:
         error(f"Error parsing table enumeration results: {e}")
-
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="SqlQ - Automated SQLi discovery & testing tool wrapping common recon and sqlmap features.",
-        epilog="Example: python sqlsc.py -d target.com --level 5 --risk 3 --dbs --dump --tamper space2comment --auto-waf -v"
-    )
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='SqlQ - Advanced SQL Injection Discovery & Testing Tool')
+    parser.add_argument('-u', '--url', '--domain', '--target', dest='domain', help='Target domain/URL to scan')
+    parser.add_argument('-o', '--output', help='Output directory')
+    parser.add_argument('--skip-recon', action='store_true', help='Skip reconnaissance phase')
+    parser.add_argument('--max-urls', type=int, help='Maximum number of URLs to scan')
+    parser.add_argument('--vulnerable-file', help='File containing already discovered vulnerable URLs')
     
-    # Basic options
-    parser.add_argument("-d", "--domain", required=False, help="Target domain to scan")
-    parser.add_argument("--tamper", help="Tamper scripts to use (comma separated)")
-    parser.add_argument("--vulnerable-file", help="Direct path to a file containing known vulnerable URLs to test")
+    # Enhanced scanning options
+    parser.add_argument('--full', action='store_true', help='Run full scan with all enhanced features')
+    parser.add_argument('--api-scan', action='store_true', help='Scan for API endpoints')
+    parser.add_argument('--login-scan', action='store_true', help='Scan for login forms')
+    parser.add_argument('--post-scan', action='store_true', help='Generate and test POST requests')
+    parser.add_argument('--js-scan', action='store_true', help='Extract endpoints from JavaScript files')
     
-    # SQLMap tuning
-    parser.add_argument("--level", type=int, default=1, help="SQLMap scan level (1-5)")
-    parser.add_argument("--risk", type=int, default=1, help="SQLMap risk level (1-3)")
-    parser.add_argument("--threads", type=int, default=10, help="Number of concurrent threads")
-    parser.add_argument("--prefix", help="Custom SQL injection prefix")
-    parser.add_argument("--suffix", help="Custom SQL injection suffix")
+    # SQLMap options
+    parser.add_argument('--level', type=int, default=1, help='SQLMap detection level (1-5)')
+    parser.add_argument('--risk', type=int, default=1, help='SQLMap risk level (1-3)')
+    parser.add_argument('--tamper', help='SQLMap tamper script(s)')
+    parser.add_argument('--threads', type=int, default=10, help='Number of concurrent threads')
+    parser.add_argument('--verbose', action='store_true', help='Verbose output')
+    parser.add_argument('--prefix', help='Injection payload prefix')
+    parser.add_argument('--suffix', help='Injection payload suffix')
+    parser.add_argument('--auto-waf', action='store_true', help='Auto-detect WAF and use appropriate tamper scripts')
     
-    # Authentication
-    parser.add_argument("--auth-type", help="HTTP authentication type (Basic, Digest, NTLM)")
-    parser.add_argument("--auth-cred", help="HTTP authentication credentials (username:password)")
-    parser.add_argument("--cookie", help="HTTP Cookie header for authenticated scans")
+    # Authentication options
+    parser.add_argument('--auth-type', help='HTTP authentication type (Basic, Digest, NTLM)')
+    parser.add_argument('--auth-cred', help='HTTP authentication credentials (user:pass)')
+    parser.add_argument('--cookie', help='HTTP Cookie header')
     
-    # Network
-    parser.add_argument("--proxy", help="Use a proxy for requests")
-    parser.add_argument("--proxy-file", help="Load proxies from a file")
-    parser.add_argument("--headers", help="Custom HTTP headers, use \n as a delimiter")
+    # Proxy options
+    parser.add_argument('--proxy', help='Proxy URL (http(s)://host:port)')
+    parser.add_argument('--proxy-file', help='File containing a list of proxies')
+    parser.add_argument('--headers', help='Extra headers')
     
-    # Enum/Dump
-    parser.add_argument("--dbs", action="store_true", help="Enumerate available databases")
-    parser.add_argument("--tables", action="store_true", help="Enumerate database tables")
-    parser.add_argument("--columns", action="store_true", help="Enumerate table columns")
-    parser.add_argument("--dump", action="store_true", help="Dump database tables content")
+    # Data extraction options
+    parser.add_argument('--dbs', action='store_true', help='Enumerate databases')
+    parser.add_argument('--tables', action='store_true', help='Enumerate tables')
+    parser.add_argument('--columns', action='store_true', help='Enumerate columns')
+    parser.add_argument('--dump', action='store_true', help='Dump table contents')
     
-    # WAF Detection & Bypass
-    parser.add_argument("--auto-waf", action="store_true", help="Automatically detect WAF and suggest tamper scripts")
-    parser.add_argument("--waf-bypass-level", type=int, choices=[1, 2, 3], default=2,
-                      help="WAF bypass aggressiveness: 1=conservative, 2=balanced, 3=aggressive")
-    
-    # Reporting
-    parser.add_argument("--report", help="Generate reports in specified formats (csv,html,json)", 
-                      metavar="FORMAT[,FORMAT]", default="json")
-    parser.add_argument("--output-dir", help="Custom output directory")
-    
-    # Optimization
-    parser.add_argument("--timeout", type=int, default=7200, help="Timeout in seconds for scanning operations")
-    parser.add_argument("--skip-recon", action="store_true", 
-                      help="Skip subdomain enumeration and URL collection (use existing files)")
-    parser.add_argument("--max-urls", type=int, default=100, 
-                      help="Maximum number of URLs to test (higher numbers take longer)")
-    
-    # Other
-    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output mode")
+    # Output options
+    parser.add_argument('--report', help='Output report format (csv, html, etc.)')
+    parser.add_argument('--timeout', type=int, help='Timeout for requests (seconds)')
     
     args = parser.parse_args()
     
     # Validate arguments
     if not args.domain and not args.vulnerable_file:
-        parser.error("Either --domain or --vulnerable-file must be specified")
-    
-    # Determine domain name for output directory
-    domain = args.domain
-    if not domain and args.vulnerable_file:
-        # Try to extract domain from the vulnerable file
-        try:
-            with open(args.vulnerable_file, 'r') as f:
-                first_url = f.readline().strip()
-                if first_url:
-                    domain_match = re.search(r'https?://([^/]+)', first_url)
-                    if domain_match:
-                        domain = domain_match.group(1)
-        except:
-            pass
+        print("[ERROR] You must specify either a target domain/URL (-u/--url) or a file with vulnerable URLs (--vulnerable-file)")
+        sys.exit(1)
         
-        # If we couldn't extract a domain, use a generic name
-        if not domain:
-            domain = "direct-scan"
+    # Check if this is a simple one-command scan
+    is_integrated_scan = args.domain and not (args.vulnerable_file or args.skip_recon)
     
-    # Create results directory for target
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if args.output_dir:
-        output_dir = os.path.expanduser(args.output_dir)
+    # For full scan mode, enable all enhanced features
+    if args.full:
+        args.api_scan = True
+        args.login_scan = True
+        args.post_scan = True
+        args.js_scan = True
+        args.auto_waf = True
+        args.dbs = True
+
+    # Set up output directory
+    if args.domain:
+        domain = args.domain.replace('https://', '').replace('http://', '').split('/')[0]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = args.output or os.path.join(RESULTS_BASE_DIR, f"{domain}_{timestamp}")
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"[*] Starting Scan for: {domain}")
+        print(f"[*] Results directory: {output_dir}")
     else:
-        output_dir = os.path.join(RESULTS_BASE_DIR, f"{domain}_{timestamp}")
-    
-    os.makedirs(output_dir, exist_ok=True)
-    
-    print(f"[*] Starting Scan for: {domain}")
+        # Direct scan mode from vulnerable file - use a generic name
+        domain = "direct-scan"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = args.output or os.path.join(RESULTS_BASE_DIR, f"{domain}_{timestamp}")
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"[*] Starting Scan for: {domain}")
+        print(f"[*] Results directory: {output_dir}")
+        
+    # Run the integrated scanning mode if this is a simple command (-u domain.com)
+    if is_integrated_scan or args.full or args.api_scan or args.js_scan or args.login_scan or args.post_scan:
+        try:
+            # Import the integrated scanner
+            from integrated_scan import run_integrated_scan
+            
+            # Print disclaimer without asking for confirmation
+            print("="*60)
+            print(" SQL INJECTION TESTING TOOL - DISCLAIMER")
+            print(" This script will perform reconnaissance and SQL Injection tests.")
+            print(" Ensure you have explicit permission to test the target domain!")
+            print(" Unauthorized testing may be illegal in your jurisdiction.")
+            print("="*60)
+            print(f"{Fore.GREEN}[+] Running in fully automatic mode{Style.RESET_ALL}")
+            
+            # Check if required tools are installed
+            success, missing_tools = check_tools()
+            if not success:
+                sys.exit(1)
+                
+            # Run the integrated scan
+            results = run_integrated_scan(args, output_dir)
+            sys.exit(0)
+        except ImportError as e:
+            print(f"[ERROR] Failed to import integrated scanning module: {e}")
+            print("[*] Falling back to standard scanning mode...")
     print(f"[*] Results directory: {output_dir}")
     
-    # Ask for confirmation
-    prompt_confirm()
+    # Skip confirmation in automatic mode
+    print(f"{Fore.GREEN}[+] Running in fully automatic mode{Style.RESET_ALL}")
     
+    # ... rest of the code remains the same ...
     # Verify required tools
     tools_ok, missing_tools = check_tools()
     if not tools_ok:
