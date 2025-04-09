@@ -445,7 +445,7 @@ def check_live_urls(url_file, live_file):
 
 def scan_with_sqlmap(live_urls_file, output_dir, tamper_scripts=None, level=1, risk=1, 
                      threads=10, verbose=False, prefix=None, suffix=None, auth_type=None, 
-                     auth_cred=None, cookie=None, proxy=None, proxy_file=None,
+                     auth_cred=None, cookie=None, proxy=None, proxy_file=None, headers=None,
                      auto_enum_dbs=True, get_dbs=True, get_tables=False, get_columns=False, dump_data=False,
                      auto_waf=False, report_format=None, timeout=None):
     """Runs SQLMap with specified options.
@@ -484,66 +484,54 @@ def scan_with_sqlmap(live_urls_file, output_dir, tamper_scripts=None, level=1, r
                 first_url = f.readline().strip()
                 if first_url:
                     print(f"[*] Testing for WAF presence using {first_url}")
+                    
+                    # Check if the URL likely has SQL injection parameters (to focus on the most promising ones)
+                    likely_sql_params = ['id', 'cat', 'category', 'product', 'item', 'article', 'news', 'page', 'user', 'username', 'uid']
+                    parsed_url = urlparse(first_url)
+                    query_params = parse_qs(parsed_url.query)
+                    
+                    # Check if any common SQL injection parameters are in the URL
+                    has_likely_sql_param = False
+                    for param in query_params:
+                        if param.lower() in likely_sql_params:
+                            has_likely_sql_param = True
+                            print(f"[+] Found likely SQL injection parameter: {param}")
+                    
                     custom_headers = {}
                     if headers:
                         # Convert header string to dictionary
-                        for header_line in headers.split('\\n'):
+                        for header_line in headers.split('\n'):
                             if ':' in header_line:
                                 key, value = header_line.split(':', 1)
                                 custom_headers[key.strip()] = value.strip()
                     
                     # Detect WAF and get recommended tampers
-                    detected_tampers = find_best_tampers(first_url, headers=custom_headers)
-                    print(f"[+] WAF detection complete. Recommended tampers: {', '.join(detected_tampers)}")
+                    all_detected_tampers = find_best_tampers(first_url, headers=custom_headers)
+                    # Select only the top 3 most effective tampers to keep scanning fast
+                    detected_tampers = all_detected_tampers[:3] if len(all_detected_tampers) > 3 else all_detected_tampers
+                    print(f"[+] WAF detection complete. Using top tampers: {', '.join(detected_tampers)}")
                     
-                    # If user specified tampers and we detected WAF, combine them
+                    # If user specified tampers, prioritize those over auto-detected ones
                     if tamper_scripts:
                         user_tampers = tamper_scripts.split(',')
-                        # Add user tampers that aren't already in detected_tampers
+                        # Use user-specified tampers first, then fill remaining slots with auto-detected ones
+                        final_tampers = []
                         for t in user_tampers:
-                            if t not in detected_tampers:
-                                detected_tampers.append(t)
-                        print(f"[+] Combined tampers: {', '.join(detected_tampers)}")
+                            if len(final_tampers) < 3:
+                                final_tampers.append(t)
+                        
+                        # Add some auto-detected tampers if we have room
+                        for t in detected_tampers:
+                            if t not in final_tampers and len(final_tampers) < 3:
+                                final_tampers.append(t)
+                        
+                        detected_tampers = final_tampers
+                        print(f"[+] Using optimized tampers: {', '.join(detected_tampers)}")
         except Exception as e:
             print(f"[!] Error during WAF detection: {e}")
             print(f"[*] Continuing with user-specified tampers if any")
     
-    # Base command
-    command = [
-        "sqlmap", 
-        "-m", live_urls_file,
-        "--batch",
-        "--level", str(level),
-        "--risk", str(risk),
-        "--threads", str(threads)
-    ]
-
-    # --- Add options based on arguments ---
-    command.extend(["--level", str(level)])
-    command.extend(["--risk", str(risk)])
-    command.extend(["--threads", str(threads)])
-
-    if verbose:
-        command.extend(["-v", "3"]) # Map --verbose flag to -v 3
-
-    # Payload Customization
-    if prefix:
-        command.extend(["--prefix", prefix])
-    if suffix:
-        command.extend(["--suffix", suffix])
-
-    # Authentication
-    if auth_type and auth_cred:
-        command.extend(["--auth-type", auth_type])
-        command.extend(["--auth-cred", auth_cred])
-    elif auth_type or auth_cred:
-         print("[WARN] Both --auth-type and --auth-cred must be provided for authentication.")
-    if cookie:
-        command.extend(["--cookie", cookie])
-
-    # Proxy
-    if proxy:
-        command.extend(["--proxy", proxy])
+    # We'll build the command below in the try block
     if proxy_file:
         proxy_file_path = os.path.abspath(proxy_file) # Ensure path is absolute
         if os.path.isfile(proxy_file_path):
@@ -553,19 +541,42 @@ def scan_with_sqlmap(live_urls_file, output_dir, tamper_scripts=None, level=1, r
     try:
         sqlmap_log_file = os.path.join(output_dir, f"sqlmap_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
         
-        # Build command
+        # Build command with proper argument formatting
         cmd = ["sqlmap", "-m", live_urls_file, "--batch", "--level", str(level), "--risk", str(risk),
                "--threads", str(threads)]
+        
+        # Add options for database enumeration
+        if get_dbs:
+            cmd.append("--dbs")
+        if get_tables:
+            cmd.append("--tables")
+        if get_columns:
+            cmd.append("--columns")
+        if dump_data:
+            cmd.append("--dump")
         
         # Add verbose flag if requested
         if verbose:
             cmd.append("-v")
             cmd.append("3")
             
-        # Add tamper scripts if provided
-        if tamper_scripts:
+        # Add tamper scripts if provided (either from auto-waf or user), limiting to max 3 for speed
+        tamper_to_use = None
+        if detected_tampers:
+            # Limit to 3 tamper scripts for faster execution
+            limited_tampers = detected_tampers[:3] if len(detected_tampers) > 3 else detected_tampers
+            tamper_to_use = ",".join(limited_tampers)
+            print(f"[*] Using optimized tamper scripts for better performance: {tamper_to_use}")
+        elif tamper_scripts:
+            # If user specified tampers directly, limit to 3 at most
+            user_tampers = tamper_scripts.split(",")
+            limited_tampers = user_tampers[:3] if len(user_tampers) > 3 else user_tampers
+            tamper_to_use = ",".join(limited_tampers)
+            print(f"[*] Using user-specified tamper scripts (limited to 3): {tamper_to_use}")
+            
+        if tamper_to_use:
             cmd.append("--tamper")
-            cmd.append(tamper_scripts)
+            cmd.append(tamper_to_use)
             
         # Add other optional parameters if provided
         if prefix:
@@ -588,13 +599,27 @@ def scan_with_sqlmap(live_urls_file, output_dir, tamper_scripts=None, level=1, r
         if proxy_file:
             cmd.append("--proxy-file")
             cmd.append(proxy_file)
-        # User-agent and tor variables are not defined in the function parameters, remove these checks
+        if headers:
+            cmd.append("--headers")
+            cmd.append(headers)
+            
+        # Add output directory
+        cmd.append("--output-dir")
+        cmd.append(output_dir)
+            
+        # Add report format if specified (and supported)
+        if report_format:
+            # Check if the format is txt (widely supported)
+            if report_format.lower() == "txt":
+                cmd.append("--text-output")
+            # You can add other supported formats here as needed
             
         # Start SQLMap scan
         info(f"Running SQLmap command: {' '.join(cmd)}")
         info(f"SQLmap output will be logged to: {sqlmap_log_file}")
         
-        send_telegram(f"Starting SQLMap scan on {live_urls_file}. Log: {sqlmap_log_file}. Tamper: {tamper_scripts}")
+        tamper_msg = tamper_to_use if tamper_to_use else "none"
+        send_telegram(f"Starting SQLMap scan on {live_urls_file}. Log: {sqlmap_log_file}. Tamper: {tamper_msg}")
         
         # Call sqlmap and capture output with real-time feedback
         stdout, stderr, return_code = run_command(cmd, show_output=True)
@@ -1021,11 +1046,76 @@ if __name__ == "__main__":
     if args.vulnerable_file:
         # For direct scan, we already have the URLs file
         live_count = url_count
+        scan_start_time = time.time()  # Define scan_start_time here
         notify_msg = f"Starting SQLMap scans on {live_count} provided URLs for {domain}."
         log_file = os.path.join(output_dir, "scan.log")
         with open(log_file, 'a') as f:
             f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Direct scan with {live_count} URLs\n")
         send_telegram(notify_msg, log_file)
+        
+        # For direct scan, proceed to SQLMap immediately
+        header("SQL INJECTION TESTING PHASE")
+        # Run SQLMap scan
+        sqlmap_start = time.time()
+        scan_results = scan_with_sqlmap(
+            live_params_urls_file,
+            output_dir,
+            tamper_scripts=args.tamper,
+            level=args.level,
+            risk=args.risk,
+            prefix=args.prefix,
+            suffix=args.suffix,
+            auth_type=args.auth_type,
+            auth_cred=args.auth_cred,
+            cookie=args.cookie,
+            proxy=args.proxy,
+            proxy_file=args.proxy_file,
+            headers=args.headers,
+            get_dbs=args.dbs,
+            get_tables=args.tables,
+            get_columns=args.columns,
+            dump_data=args.dump,
+            threads=args.threads,
+            verbose=args.verbose,
+            auto_waf=args.auto_waf,
+            report_format=args.report,
+            timeout=args.timeout,
+            auto_enum_dbs=True
+        )
+        sqlmap_end = time.time()
+        sqlmap_duration = sqlmap_end - sqlmap_start
+        
+        # Generate scan summary
+        summary_file = os.path.join(output_dir, "scan_summary.txt")
+        with open(summary_file, 'w') as f:
+            f.write(f"SqlQ Scan Summary for {domain}\n")
+            f.write(f"{'='*50}\n")
+            f.write(f"Scan started at: {datetime.fromtimestamp(scan_start_time).strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Scan completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total scan duration: {(time.time() - scan_start_time)/60:.2f} minutes\n\n")
+            
+            f.write(f"Direct scan mode: Used {live_count} provided URLs\n")
+            f.write(f"SQLMap scan duration: {sqlmap_duration/60:.2f} minutes\n\n")
+            
+            f.write(f"WAF Detection: {'Enabled' if args.auto_waf else 'Disabled'}\n")
+            if args.tamper:
+                f.write(f"User-specified tamper scripts: {args.tamper}\n")
+                
+            f.write(f"\nResults saved to: {output_dir}\n")
+        
+        scan_end_time = time.time()
+        duration_mins = (scan_end_time - scan_start_time) / 60
+        
+        print(f"\n[COMPLETE] SQL Injection scan completed in {duration_mins:.2f} minutes.")
+        print(f"Results saved to {output_dir}")
+        print(f"Scan summary saved to {summary_file}")
+        
+        # Final notification
+        completion_msg = f"Scan completed for {domain} in {duration_mins:.2f} minutes. Check {output_dir} for results."
+        send_telegram(completion_msg, log_file)
+        
+        # Exit after direct scan is complete
+        sys.exit(0)
     elif url_count > 0:
         # Check which URLs are live (standard flow)
         live_count = check_live_urls(filtered_urls_file, live_urls_file)
