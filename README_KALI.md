@@ -2,11 +2,20 @@
 
 This guide provides step-by-step instructions for installing and using the Advanced SQL Injection Scanner on Kali Linux.
 
+## System Requirements
+
+- Kali Linux (recommended) or other Linux distributions
+- Bash 4.0+ (required for associative arrays)
+- Python 3.6 or higher
+- Required libraries (installed automatically by the installer)
+
+> **Note:** This tool uses Bash 4.0+ features (associative arrays) and will not work on systems with older Bash versions (like macOS which comes with Bash 3.2). See the "Alternative Setup Methods" section if you're not using Kali Linux.
+
 ## Quick Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/SqlQ.git
+   git clone https://github.com/rikou2/SqlQ.git
    cd SqlQ
    ```
 
@@ -181,9 +190,61 @@ Common options include:
 - `--db-detect` - Automatically detect database type for better payloads 
 ```
 
-# Adding Your SQL Injection Scanner to GitHub
+## Alternative Setup Methods
 
-Here's how to upload your project to GitHub:
+### Option 1: Using Docker
+
+If you're not running Kali Linux or don't have Bash 4.0+, you can use Docker to run the tool in a Kali Linux container:
+
+1. **Install Docker for your platform**:
+   - [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/)
+   - [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/)
+   - On Linux: `sudo apt install docker.io docker-compose`
+
+2. **Pull and run the Kali Linux container with the tool**:
+   ```bash
+   # Pull the Kali Linux image
+   docker pull kalilinux/kali-rolling
+   
+   # Run a Kali Linux container with shared access to your local SqlQ directory
+   docker run -it --name kali-sqlq -v /path/to/SqlQ:/SqlQ kalilinux/kali-rolling
+   ```
+
+3. **Set up the environment in the container**:
+   ```bash
+   # Update package lists
+   apt update
+   
+   # Install required dependencies
+   apt install -y git python3 python3-pip curl wget netcat
+   
+   # Navigate to your shared folder
+   cd /SqlQ
+   
+   # Install the tool
+   bash install.sh
+   
+   # Run the SQL injection scanner
+   sqliq scan example.com
+   ```
+
+### Option 2: Using a Virtual Machine
+
+For a more isolated and complete Kali Linux experience:
+
+1. **Download and install VirtualBox or VMware**
+2. **Download Kali Linux VM image** from [Kali Linux Downloads](https://www.kali.org/get-kali/#kali-virtual-machines)
+3. **Import and run the VM**
+4. **Clone your repository in the VM**:
+   ```bash
+   git clone https://github.com/rikou2/SqlQ.git
+   cd SqlQ
+   sudo bash install.sh
+   ```
+
+# GitHub Repository Management
+
+Here's how to manage your project on GitHub:
 
 1. **Create a GitHub account** at https://github.com/signup if you don't have one
 
