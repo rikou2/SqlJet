@@ -1,0 +1,159 @@
+#!/bin/bash
+# SQLiQ - Unified SQL Injection Scanner Command
+# A single command to access all features of the SQL Injection Scanner
+
+# Directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Display header
+show_header() {
+    echo ""
+    echo "  ███████╗ ██████╗ ██╗      ██████╗  "
+    echo "  ██╔════╝██╔═══██╗██║     ██╔═══██╗ "
+    echo "  ███████╗██║   ██║██║     ██║   ██║ "
+    echo "  ╚════██║██║▄▄ ██║██║     ██║▄▄ ██║ "
+    echo "  ███████║╚██████╔╝███████╗╚██████╔╝ "
+    echo "  ╚══════╝ ╚══▀▀═╝ ╚══════╝ ╚══▀▀═╝  "
+    echo "                                      "
+    echo "  Advanced SQL Injection Scanner v1.5.0"
+    echo "  -------------------------------------- "
+    echo ""
+}
+
+# Display help
+show_help() {
+    show_header
+    echo "Usage: sqliq <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  scan <url/domain>  - Scan a URL or domain for SQL injection vulnerabilities"
+    echo "  quick <url/domain> - Quick scan with automatic WAF bypass"
+    echo "  full <url/domain>  - Full scan with all detection methods"
+    echo "  waf <url>          - Test WAF detection and bypass techniques"
+    echo "  python <url>       - Use Python-based scanner (more advanced detection)"
+    echo "  ml-scan <url>      - Use machine learning enhanced detection"
+    echo "  payloads           - Generate comprehensive payloads for all databases"
+    echo "  tampers            - List available tamper techniques"
+    echo "  update             - Update dependencies and scanner components"
+    echo "  version            - Show version information"
+    echo ""
+    echo "Examples:"
+    echo "  sqliq scan example.com         - Basic scan"
+    echo "  sqliq quick https://example.com/page.php?id=1 - Quick single URL scan"
+    echo "  sqliq full example.com         - Full scan with WAF bypass and DB detection"
+    echo "  sqliq waf https://example.com  - Test WAF detection"
+    echo "  sqliq python example.com       - Use Python-based scanner"
+    exit 0
+}
+
+# Function to ensure all required files exist
+check_files() {
+    local required_files=("sqli_scanner.sh" "sqli_core.sh" "sqli_detect.sh" "sqli_exploit.sh" "sqli_report.sh" "sqli_waf.sh" "sqli_payloads.sh")
+    
+    for file in "${required_files[@]}"; do
+        if [ ! -f "$SCRIPT_DIR/$file" ]; then
+            echo "Error: Required file $file not found in $SCRIPT_DIR"
+            echo "Please run the installer first: sudo bash install.sh"
+            exit 1
+        fi
+    done
+}
+
+# Make all scripts executable
+make_executable() {
+    chmod +x "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR"/*.py 2>/dev/null || true
+}
+
+# Check if help is requested or no arguments provided
+if [[ "$1" == "-h" || "$1" == "--help" || "$1" == "help" || -z "$1" ]]; then
+    show_help
+fi
+
+# Process command
+case "$1" in
+    scan)
+        check_files
+        make_executable
+        shift
+        cd "$SCRIPT_DIR" && ./sqli_scanner.sh "$@"
+        ;;
+    quick)
+        check_files
+        make_executable
+        shift
+        cd "$SCRIPT_DIR" && ./sqli_scanner.sh "$1" --threads 15 --auto-waf --report-format all
+        ;;
+    full)
+        check_files
+        make_executable
+        shift
+        cd "$SCRIPT_DIR" && ./sqli_scanner.sh "$1" --threads 20 --auto-waf --db-detect --report-format all --encode-level 3
+        ;;
+    waf)
+        make_executable
+        shift
+        if [ -f "$SCRIPT_DIR/waf_integration.py" ]; then
+            cd "$SCRIPT_DIR" && python3 waf_integration.py "$1"
+        elif [ -f "$SCRIPT_DIR/waf_integration.sh" ]; then
+            cd "$SCRIPT_DIR" && ./waf_integration.sh "$1"
+        else
+            echo "WAF detection module not found"
+            exit 1
+        fi
+        ;;
+    python)
+        make_executable
+        shift
+        if [ -f "$SCRIPT_DIR/scan_all.py" ]; then
+            cd "$SCRIPT_DIR" && python3 scan_all.py "$@"
+        else
+            echo "Python scanner module not found"
+            exit 1
+        fi
+        ;;
+    ml-scan)
+        make_executable
+        shift
+        if [ -f "$SCRIPT_DIR/ml_detection.py" ]; then
+            cd "$SCRIPT_DIR" && python3 ml_detection.py "$@"
+        else
+            echo "Machine learning module not found"
+            exit 1
+        fi
+        ;;
+    payloads)
+        check_files
+        make_executable
+        cd "$SCRIPT_DIR" && ./sqli_scanner.sh example.com --generate-payloads
+        echo "Payloads generated in $SCRIPT_DIR/results/example.com/*/payloads/"
+        ;;
+    tampers)
+        make_executable
+        if [ -f "$SCRIPT_DIR/waf_integration.py" ]; then
+            cd "$SCRIPT_DIR" && python3 waf_integration.py --list-tampers
+        elif [ -f "$SCRIPT_DIR/waf_integration.sh" ]; then
+            cd "$SCRIPT_DIR" && ./waf_integration.sh --list-tampers
+        else
+            cd "$SCRIPT_DIR" && ./sqli_scanner.sh --list-tampers
+        fi
+        ;;
+    update)
+        echo "Updating SQLi injection scanner dependencies..."
+        sudo apt-get update && sudo apt-get install -y curl jq bc parallel python3 python3-pip sqlmap
+        pip3 install requests argparse user_agents
+        GO111MODULE=on go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+        GO111MODULE=on go install -v github.com/lc/gau/v2/cmd/gau@latest
+        GO111MODULE=on go install -v github.com/s0md3v/uro@latest
+        GO111MODULE=on go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
+        echo "Update completed successfully"
+        ;;
+    version)
+        show_header
+        echo "Location: $SCRIPT_DIR"
+        ;;
+    *)
+        echo "Unknown command: $1"
+        echo "Use 'sqliq --help' to see available commands"
+        exit 1
+        ;;
+esac 
