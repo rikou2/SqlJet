@@ -34,7 +34,7 @@ show_help() {
     echo "  ml-scan <url>      - Use machine learning enhanced detection"
     echo "  payloads           - Generate comprehensive payloads for all databases"
     echo "  tampers            - List available tamper techniques"
-    echo "  update             - Update dependencies and scanner components"
+    echo "  update [option]    - Update the tool (options: --github, --dependencies)"
     echo "  version            - Show version information"
     echo ""
     echo "Examples:"
@@ -43,6 +43,9 @@ show_help() {
     echo "  sqliq full example.com         - Full scan with WAF bypass and DB detection"
     echo "  sqliq waf https://example.com  - Test WAF detection"
     echo "  sqliq python example.com       - Use Python-based scanner"
+    echo "  sqliq update                   - Update both code from GitHub and dependencies"
+    echo "  sqliq update --github          - Only update code from GitHub repository"
+    echo "  sqliq update --dependencies    - Only update dependencies and libraries"
     exit 0
 }
 
@@ -138,14 +141,62 @@ case "$1" in
         fi
         ;;
     update)
-        echo "Updating SQLi injection scanner dependencies..."
-        sudo apt-get update && sudo apt-get install -y curl jq bc parallel python3 python3-pip sqlmap
-        pip3 install requests argparse user_agents
-        GO111MODULE=on go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
-        GO111MODULE=on go install -v github.com/lc/gau/v2/cmd/gau@latest
-        GO111MODULE=on go install -v github.com/s0md3v/uro@latest
-        GO111MODULE=on go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
-        echo "Update completed successfully"
+        shift
+        case "$1" in
+            "--dependencies"|"deps")
+                echo "Updating SQLi injection scanner dependencies..."
+                sudo apt-get update && sudo apt-get install -y curl jq bc parallel python3 python3-pip sqlmap git
+                pip3 install requests argparse user_agents
+                GO111MODULE=on go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+                GO111MODULE=on go install -v github.com/lc/gau/v2/cmd/gau@latest
+                GO111MODULE=on go install -v github.com/s0md3v/uro@latest
+                GO111MODULE=on go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
+                echo "Dependencies updated successfully"
+                ;;
+            "--github"|"git")
+                echo "Updating SqlQ directly from GitHub repository..."
+                # Store the current directory to return to it after update
+                CURRENT_DIR=$(pwd)
+                cd "$SCRIPT_DIR"
+                # Check if it's a git repository
+                if [ -d ".git" ]; then
+                    echo "Pulling latest changes from GitHub..."
+                    git pull origin main
+                    make_executable
+                    echo "SqlQ updated successfully from GitHub"
+                else
+                    echo "Error: This doesn't appear to be a git repository."
+                    echo "Please clone the repository first: git clone https://github.com/rikou2/SqlQ.git"
+                    exit 1
+                fi
+                cd "$CURRENT_DIR"
+                ;;
+            *)
+                echo "Updating SqlQ completely (both code and dependencies)..."
+                # Update from GitHub first
+                CURRENT_DIR=$(pwd)
+                cd "$SCRIPT_DIR"
+                if [ -d ".git" ]; then
+                    echo "Pulling latest changes from GitHub..."
+                    git pull origin main
+                    make_executable
+                    echo "SqlQ code updated successfully from GitHub"
+                else
+                    echo "Warning: This doesn't appear to be a git repository. Only updating dependencies."
+                fi
+                cd "$CURRENT_DIR"
+                
+                # Then update dependencies
+                echo "Updating SQLi injection scanner dependencies..."
+                sudo apt-get update && sudo apt-get install -y curl jq bc parallel python3 python3-pip sqlmap git
+                pip3 install requests argparse user_agents
+                GO111MODULE=on go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+                GO111MODULE=on go install -v github.com/lc/gau/v2/cmd/gau@latest
+                GO111MODULE=on go install -v github.com/s0md3v/uro@latest
+                GO111MODULE=on go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
+                echo "SqlQ update completed successfully"
+                ;;
+        esac
         ;;
     version)
         show_header
