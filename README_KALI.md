@@ -179,3 +179,48 @@ Common options include:
 - `--tamper <techniques>` - Comma-separated tamper techniques
 - `--auto-waf` - Auto-detect WAF and use appropriate bypass techniques
 - `--db-detect` - Automatically detect database type for better payloads 
+```
+
+# Adding Your SQL Injection Scanner to GitHub
+
+Here's how to upload your project to GitHub:
+
+1. **Create a GitHub account** at https://github.com/signup if you don't have one
+
+2. **Create a new repository on GitHub**
+   - Go to https://github.com/new
+   - Name it "SqlQ" or your preferred name
+   - Add a description like "Advanced SQL Injection Scanner Tool"
+   - Choose Public or Private visibility
+   - Click "Create repository"
+
+3. **Initialize and push your local repository**
+   ```bash
+   # Navigate to your project directory
+   cd SqlQ
+
+   # Initialize git repository
+   git init
+
+   # Add all your files
+   git add .
+
+   # Commit your files
+   git commit -m "Initial commit - SQL Injection Scanner"
+
+   # Set your remote repository
+   git remote add origin https://github.com/YourUsername/SqlQ.git
+
+   # Push to GitHub
+   git push -u origin main
+   ```
+
+4. **If your default branch is 'master' instead of 'main':**
+   ```bash
+   git push -u origin master
+   ```
+
+5. **Verify** your code appears on your GitHub repository page
+
+You may need to authenticate with your GitHub credentials during the push process.
+</rewritten_file>
