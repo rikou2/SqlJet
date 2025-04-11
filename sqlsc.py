@@ -194,10 +194,29 @@ def check_tools(required_tools=None):
         
         return True, []
 
+def display_banner():
+    banner = f'''
+    {Fore.CYAN}{Style.BRIGHT}  ______     _ ___      _      _     ___ 
+ /  ___/ __ | |   \    | |    / \   |_ _|
+ \___ \ / _` | |) |_  | |   / _ \   | | 
+  ___) | (_| |  __/ |_| |  / ___ \  | | 
+ |____/ \__, |_|  \___/  /_/   \_\ |___|
+        |___/  {Fore.RED}Ai{Fore.CYAN} V1           {Style.RESET_ALL}
+
+{Fore.GREEN}{Style.BRIGHT}       ~ by electrounice ~{Style.RESET_ALL}
+
+{Fore.YELLOW}Copyright (c) 2024-2025 SqlJet Ai developers by r13{Style.RESET_ALL}
+    '''
+    print(banner)
+
 def prompt_confirm():
+    display_banner()
     print(f"{Fore.YELLOW}{Style.BRIGHT}{'=' * 60}{Style.RESET_ALL}")
-    print(f"{Fore.YELLOW}{Style.BRIGHT} SQL INJECTION TESTING TOOL - DISCLAIMER{Style.RESET_ALL}")
-    print(f"{Fore.YELLOW} This script will perform reconnaissance and SQL Injection tests.{Style.RESET_ALL}")
+    print(f"{Fore.YELLOW}{Style.BRIGHT} SqlJet Ai - DISCLAIMER{Style.RESET_ALL}")
+    print(f"{Fore.YELLOW} SqlJet Ai is an open source penetration testing tool that{Style.RESET_ALL}")
+    print(f"{Fore.YELLOW} automates the process of detecting and exploiting SQL injection.{Style.RESET_ALL}")
+    print(f"{Fore.YELLOW} This tool is for educational purposes only.{Style.RESET_ALL}")
+    print(f"{Fore.RED} The developer is not responsible for any illegal use!{Style.RESET_ALL}")
     print(f"{Fore.YELLOW} Ensure you have explicit permission to test the target domain!{Style.RESET_ALL}")
     print(f"{Fore.RED} Unauthorized testing may be illegal in your jurisdiction.{Style.RESET_ALL}")
     print(f"{Fore.YELLOW}{Style.BRIGHT}{'=' * 60}{Style.RESET_ALL}")
@@ -903,7 +922,7 @@ def enum_tables_for_db(vulnerable_urls_file, output_dir, db_name, tamper_scripts
         error(f"Error parsing table enumeration results: {e}")
 if __name__ == "__main__":
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='SqlQ - Advanced SQL Injection Discovery & Testing Tool')
+    parser = argparse.ArgumentParser(description='SqlJet Ai V1 - Advanced SQL Injection Discovery & Testing Tool')
     parser.add_argument('-u', '--url', dest='domain', help='Target domain to scan')
     parser.add_argument('-l', '--list', dest='domain_list', help='File containing list of domains')
     parser.add_argument('-o', '--output', help='Output directory for results')
@@ -993,10 +1012,14 @@ if __name__ == "__main__":
             # Import the integrated scanner
             from integrated_scan import run_integrated_scan
             
-            # Print disclaimer without asking for confirmation
+            # Display banner and disclaimer without asking for confirmation
+            display_banner()
             print("="*60)
-            print(" SQL INJECTION TESTING TOOL - DISCLAIMER")
-            print(" This script will perform reconnaissance and SQL Injection tests.")
+            print(" SqlJet Ai V1 - DISCLAIMER")
+            print(" SqlJet Ai is an open source penetration testing tool that")
+            print(" automates the process of detecting and exploiting SQL injection.")
+            print(" This tool is for educational purposes only.")
+            print(" The developer is not responsible for any illegal use!")
             print(" Ensure you have explicit permission to test the target domain!")
             print(" Unauthorized testing may be illegal in your jurisdiction.")
             print("="*60)

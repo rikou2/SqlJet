@@ -22,6 +22,12 @@ def header(msg):
     print(f"   {msg}")
     print(f"{'=' * 60}")
 
+def display_signature():
+    """Display SqlJet Ai V1 signature"""
+    from colorama import Fore, Style
+    print(f"\n{Fore.CYAN}{Style.BRIGHT}SqlJet{Fore.RED} Ai{Fore.CYAN} V1{Style.RESET_ALL} - {Fore.GREEN}by electrounice{Style.RESET_ALL}")
+    print(f"{Fore.YELLOW}Copyright (c) 2024-2025 SqlJet Ai developers by r13{Style.RESET_ALL}")
+
 def info(msg):
     """Print info message"""
     print(f"[*] {msg}")
@@ -40,15 +46,20 @@ def error(msg):
 
 # --- Main Integration Function ---
 def run_integrated_scan(args, output_dir):
-    """
-    Run a fully integrated SQL injection scan with a single command
+    """Run the integrated scanning workflow
+    
+    This function orchestrates the entire scanning process from reconnaissance to SQLMap scanning
+    including Katana crawling for automatic SQL injection point discovery
+    
+    SqlJet Ai V1 - Advanced SQL Injection Discovery & Testing Tool
+    Copyright (c) 2024-2025 SqlJet Ai developers by r13
     
     Args:
-        args: Command line arguments
-        output_dir: Directory to store results
-    
+        args: The command line arguments
+        output_dir: The output directory for results
+        
     Returns:
-        dict: Scan results and statistics
+        dict: Results of the scan
     """
     domain = args.domain.replace('http://', '').replace('https://', '').split('/')[0]
     scan_start_time = time.time()
@@ -65,6 +76,7 @@ def run_integrated_scan(args, output_dir):
     all_discovered_urls = set()
     
     header("STARTING COMPREHENSIVE SQL INJECTION SCAN")
+    display_signature()
     info(f"Target: {domain}")
     info(f"Output directory: {output_dir}")
     info(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -77,7 +89,7 @@ def run_integrated_scan(args, output_dir):
         # Import the collect_subdomains function from sqlsc
         from sqlsc import collect_subdomains
         
-        success(f"Starting subdomain enumeration for {domain}")
+        print(f"[+] Starting subdomain enumeration for {domain}")
         subdomains_count = collect_subdomains(domain, subdomains_file)
         
         with open(log_file, 'a') as f:
@@ -91,7 +103,7 @@ def run_integrated_scan(args, output_dir):
     from sqlsc import collect_urls, filter_urls, check_live_urls
     
     if not args.skip_recon and os.path.exists(subdomains_file):
-        success(f"Collecting URLs from subdomains")
+        print(f"[+] Collecting URLs from subdomains")
         collect_urls(subdomains_file, all_urls_file)
     else:
         # If skipping subdomain recon, just collect for main domain
@@ -292,7 +304,7 @@ def run_integrated_scan(args, output_dir):
             )
             
             if db_enum_results:
-                success(f"Found {len(db_enum_results)} databases")
+                print(f"[+] Found {len(db_enum_results)} databases")
                 for db in db_enum_results:
                     info(f"Database found: {db}")
     
@@ -341,8 +353,8 @@ def run_integrated_scan(args, output_dir):
         f.write(f"\nResults saved to: {output_dir}\n")
     
     info(f"Scan completed in {total_duration/60:.2f} minutes")
-    success(f"Results saved to {output_dir}")
-    success(f"Summary saved to {summary_file}")
+    print(f"[+] Results saved to {output_dir}")
+    print(f"[+] Summary saved to {summary_file}")
     
     return {
         'domain': domain,
