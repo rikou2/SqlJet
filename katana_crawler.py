@@ -63,7 +63,6 @@ def crawl_with_katana(target, output_file, depth=3, timeout=300, max_urls=1000, 
         "-timeout", str(timeout),
         "-mr", str(max_urls),
         "-o", temp_output,
-        "-field", "url,method,params,body",
         "-fs", "kr",  # Disable known extensions crawler
     ]
     
