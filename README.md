@@ -1,6 +1,6 @@
-# SqlQ - Advanced SQL Injection Discovery & Testing Tool
+# SqlJet Ai V1 - Advanced SQL Injection Discovery & Testing Tool
 
-SqlQ is a comprehensive SQL injection detection and exploitation tool that automates the process of discovering SQL injection vulnerabilities across various endpoints including subdomains, APIs, and login forms.
+SqlJet Ai V1 is a comprehensive SQL injection detection and exploitation tool that automates the process of discovering SQL injection vulnerabilities across various endpoints including subdomains, APIs, and login forms.
 
 ## Features
 
