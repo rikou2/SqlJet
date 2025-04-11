@@ -10,6 +10,7 @@ import time
 import json
 import shutil
 from datetime import datetime
+from katana_crawler import crawl_with_katana, filter_potential_sqli_urls
 
 # Import enhancer features
 from enhancer import extract_js_endpoints, find_login_forms, detect_content_types, generate_post_requests, enhance_scan
@@ -109,16 +110,20 @@ def run_integrated_scan(args, output_dir):
     # --- PHASE 3: ENHANCED SCANNING ---
     header("PHASE 3: ENHANCED ATTACK SURFACE DISCOVERY")
     
+    js_endpoints = 0
+    login_forms = 0
+    post_requests = 0
+    
     if args.full or args.js_scan:
         # Extract API endpoints from JavaScript
         js_endpoints_file = os.path.join(output_dir, "js_endpoints.txt")
-        js_endpoint_count = extract_js_endpoints(f"http://{domain}", js_endpoints_file)
+        js_endpoints = extract_js_endpoints(f"http://{domain}", js_endpoints_file)
         
         with open(log_file, 'a') as f:
-            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Found {js_endpoint_count} JavaScript endpoints\n")
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Found {js_endpoints} JavaScript endpoints\n")
         
         # Add these endpoints to our list of URLs to test
-        if os.path.exists(js_endpoints_file) and js_endpoint_count > 0:
+        if os.path.exists(js_endpoints_file) and js_endpoints > 0:
             with open(js_endpoints_file, 'r') as f:
                 js_endpoints = [line.strip() for line in f.readlines()]
                 all_discovered_urls.update(js_endpoints)
@@ -126,13 +131,13 @@ def run_integrated_scan(args, output_dir):
     if args.full or args.login_scan:
         # Find login forms
         login_forms_file = os.path.join(output_dir, "login_forms.txt")
-        login_form_count = find_login_forms(f"http://{domain}", login_forms_file)
+        login_forms = find_login_forms(f"http://{domain}", login_forms_file)
         
         with open(log_file, 'a') as f:
-            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Found {login_form_count} login forms\n")
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Found {login_forms} login forms\n")
         
         # Add these login forms to our list of URLs to test
-        if os.path.exists(login_forms_file) and login_form_count > 0:
+        if os.path.exists(login_forms_file) and login_forms > 0:
             with open(login_forms_file, 'r') as f:
                 login_forms = [line.strip() for line in f.readlines()]
                 all_discovered_urls.update(login_forms)
@@ -147,24 +152,67 @@ def run_integrated_scan(args, output_dir):
         
         # Then generate POST templates for those forms
         if os.path.exists(html_form_urls_file):
-            post_template_count = generate_post_requests(html_form_urls_file, post_templates_file)
+            post_requests = generate_post_requests(html_form_urls_file, post_templates_file)
             
             with open(log_file, 'a') as f:
-                f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Generated {post_template_count} POST request templates\n")
+                f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Generated {post_requests} POST request templates\n")
+    
+    # Run Katana crawler to find potential SQL injection points if enabled
+    katana_urls = 0
+    if args.katana:
+        katana_start = time.time()
+        print(f"\n{'-'*60}\n[*] PHASE 4: KATANA CRAWLING - DISCOVERING POTENTIAL SQL INJECTION POINTS\n{'-'*60}")
+        
+        # Define output files for Katana results
+        katana_output = os.path.join(output_dir, "katana_urls.txt")
+        katana_filtered = os.path.join(output_dir, "katana_filtered.txt")
+        
+        # Run Katana crawler
+        domain = args.domain
+        if not domain.startswith('http'):
+            domain = f"http://{domain}"
+            
+        print(f"[*] Crawling {domain} with Katana to find potential SQL injection points...")
+        success, count = crawl_with_katana(
+            target=domain,
+            output_file=katana_output,
+            depth=args.katana_depth,
+            timeout=args.katana_timeout,
+            max_urls=args.max_urls or 1000
+        )
+        
+        if success and count > 0:
+            # Filter the results to find high-potential SQL injection points
+            katana_urls = filter_potential_sqli_urls(katana_output, katana_filtered)
+            
+            # If we found potential injection points, use the filtered file for scanning
+            if katana_urls > 0:
+                shutil.copy(katana_filtered, live_params_urls_file)
+                print(f"[+] Added {katana_urls} potential SQL injection points discovered by Katana")
+            
+        katana_end = time.time()
+        print(f"[*] Katana crawling completed in {int(katana_end - katana_start)} seconds")
     
     # Combine all discovered URLs
     if all_discovered_urls:
         combined_urls_file = os.path.join(output_dir, "combined_urls.txt")
         
         # Read existing URLs from live_params_urls_file
+        existing_urls = set()
         if os.path.exists(live_params_urls_file):
             with open(live_params_urls_file, 'r') as f:
-                existing_urls = [line.strip() for line in f.readlines()]
+                existing_urls = set([line.strip() for line in f.readlines()])
                 all_discovered_urls.update(existing_urls)
+        
+        # Add Katana URLs if they exist
+        if katana_urls > 0 and os.path.exists(katana_filtered):
+            with open(katana_filtered, 'r') as f:
+                katana_discovered = set([line.strip() for line in f.readlines()])
+                all_discovered_urls.update(katana_discovered)
         
         # Write combined URLs to file
         with open(combined_urls_file, 'w') as f:
-            for url in sorted(all_discovered_urls):
+            for url in all_discovered_urls:
                 f.write(f"{url}\n")
         
         # Use this as our target for SQLMap testing

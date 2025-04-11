@@ -139,7 +139,7 @@ def check_tools(required_tools=None):
         required_tools = ["subfinder", "httpx", "sqlmap"]
     
     # These tools are helpful but not required
-    optional_tools = ["waybackurls", "gau"]
+    optional_tools = ["waybackurls", "katana", "gau"]
         
     missing_tools = []
     versions = {}
@@ -904,8 +904,12 @@ def enum_tables_for_db(vulnerable_urls_file, output_dir, db_name, tamper_scripts
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='SqlQ - Advanced SQL Injection Discovery & Testing Tool')
-    parser.add_argument('-u', '--url', '--domain', '--target', dest='domain', help='Target domain/URL to scan')
-    parser.add_argument('-o', '--output', help='Output directory')
+    parser.add_argument('-u', '--url', dest='domain', help='Target domain to scan')
+    parser.add_argument('-l', '--list', dest='domain_list', help='File containing list of domains')
+    parser.add_argument('-o', '--output', help='Output directory for results')
+    parser.add_argument('--katana', action='store_true', default=True, help='Use Katana crawler to find potential SQL injection points')
+    parser.add_argument('--katana-depth', type=int, default=3, help='Katana crawler depth (default: 3)')
+    parser.add_argument('--katana-timeout', type=int, default=300, help='Katana crawler timeout in seconds (default: 300)')
     parser.add_argument('--skip-recon', action='store_true', help='Skip reconnaissance phase')
     parser.add_argument('--max-urls', type=int, help='Maximum number of URLs to scan')
     parser.add_argument('--vulnerable-file', help='File containing already discovered vulnerable URLs')
@@ -984,7 +988,7 @@ if __name__ == "__main__":
         print(f"[*] Results directory: {output_dir}")
         
     # Run the integrated scanning mode if this is a simple command (-u domain.com)
-    if is_integrated_scan or args.full or args.api_scan or args.js_scan or args.login_scan or args.post_scan:
+    if is_integrated_scan or args.full or args.api_scan or args.js_scan or args.login_scan or args.post_scan or args.katana:
         try:
             # Import the integrated scanner
             from integrated_scan import run_integrated_scan
