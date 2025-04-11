@@ -25,8 +25,8 @@ def header(msg):
 def display_signature():
     """Display SqlJet Ai V1 signature"""
     from colorama import Fore, Style
-    print(f"\n{Fore.CYAN}{Style.BRIGHT}SqlJet{Fore.RED} Ai{Fore.CYAN} V1{Style.RESET_ALL} - {Fore.GREEN}by electrounice{Style.RESET_ALL}")
-    print(f"{Fore.YELLOW}Copyright (c) 2024-2025 SqlJet Ai developers by r13{Style.RESET_ALL}")
+    print(f"\n{Fore.CYAN}{Style.BRIGHT}SqlJet{Fore.RED} Ai{Fore.CYAN} V1{Style.RESET_ALL} - {Fore.GREEN}by R13{Style.RESET_ALL}")
+    print(f"{Fore.YELLOW}Copyright (c) 2024-2025 SqlJet Ai developers by R13{Style.RESET_ALL}")
 
 def info(msg):
     """Print info message"""

@@ -203,9 +203,9 @@ def display_banner():
  |____/ \__, |_|  \___/  /_/   \_\ |___|
         |___/  {Fore.RED}Ai{Fore.CYAN} V1           {Style.RESET_ALL}
 
-{Fore.GREEN}{Style.BRIGHT}       ~ by electrounice ~{Style.RESET_ALL}
+{Fore.GREEN}{Style.BRIGHT}       ~ by R13 ~{Style.RESET_ALL}
 
-{Fore.YELLOW}Copyright (c) 2024-2025 SqlJet Ai developers by r13{Style.RESET_ALL}
+{Fore.YELLOW}Copyright (c) 2024-2025 SqlJet Ai developers by R13{Style.RESET_ALL}
     '''
     print(banner)
 
