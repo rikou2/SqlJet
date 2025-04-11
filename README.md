@@ -8,7 +8,7 @@
 
 <p align="center"><i>Copyright (c) 2024-2025 SqlJet Ai developers by R13</i></p>
 
-SqlJet Ai is an open source penetration testing tool that automates the process of detecting and exploiting SQL injection vulnerabilities across various endpoints including subdomains, APIs, and login forms. This tool is for educational purposes only - the developer is not responsible for any illegal use.
+SqlJet Ai V1 is a comprehensive SQL injection detection and exploitation tool that automates the process of discovering SQL injection vulnerabilities across various endpoints including subdomains, APIs, and login forms. This tool is for educational purposes only - the developer is not responsible for any illegal use.
 
 ## ✨ Features
 
