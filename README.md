@@ -114,125 +114,143 @@ pip install sqlmap
 
 ## Usage
 
+### New CLI Interface
+
+Starting with the latest version, SqlJet Ai provides a more user-friendly command-line interface:
+
+```bash
+# Make the CLI executable (one-time setup)
+chmod +x run_sqljet.py
+ln -sf run_sqljet.py sqljet
+chmod +x sqljet
+
+# Run a basic scan against a domain
+./sqljet -u example.com
+
+# Show help and all available options
+./sqljet --help
+```
+
+The new CLI interface offers the same functionality as the original command but with improved usability and help documentation.
+
 ### Basic Commands
 
 ```bash
 # Run a basic scan against a domain
-python3 sqljet.py -u example.com
+./sqljet -u example.com
 
 # Specify output directory
-python3 sqljet.py -u example.com -o /path/to/output
+./sqljet -u example.com -o /path/to/output
 
 # Skip reconnaissance phase
-python3 sqljet.py -u example.com --skip-recon
+./sqljet -u example.com --skip-recon
 
 # Scan using a file of pre-discovered vulnerable URLs
-python3 sqljet.py --vulnerable-file vulnerable_urls.txt
+./sqljet --vulnerable-file vulnerable_urls.txt
 ```
 
 ### Advanced Options
 
 ```bash
 # Set SQLMap risk and level parameters
-python3 sqljet.py -u example.com --risk 3 --level 5
+./sqljet -u example.com --risk 3 --level 5
 
 # Enable automatic WAF detection and bypass
-python3 sqljet.py -u example.com --auto-waf
+./sqljet -u example.com --auto-waf
 
 # Customize SQLMap tamper scripts
-python3 sqljet.py -u example.com --tamper "between,charencode,space2comment"
+./sqljet -u example.com --tamper "between,charencode,space2comment"
 
 # Set a custom timeout
-python3 sqljet.py -u example.com --timeout 300
+./sqljet -u example.com --timeout 300
 
 # Limit maximum number of URLs to scan
-python3 sqljet.py -u example.com --max-urls 500
+./sqljet -u example.com --max-urls 500
 ```
 
 ### Katana Crawler Options
 
 ```bash
 # Enable Katana crawler (enabled by default)
-python3 sqljet.py -u example.com --katana
+./sqljet -u example.com --katana
 
 # Set Katana crawler depth
-python3 sqljet.py -u example.com --katana-depth 5
+./sqljet -u example.com --katana-depth 5
 
 # Set Katana crawler timeout
-python3 sqljet.py -u example.com --katana-timeout 600
+./sqljet -u example.com --katana-timeout 600
 ```
 
 ### Tool Management
 
 ```bash
 # Update all required tools (subfinder, httpx, katana, gau, nuclei) and Python dependencies
-python3 sqljet.py -up
+./sqljet -up
 
 # Same as above with long-form argument
-python3 sqljet.py --update
+./sqljet --update
 ```
 
 ### Feature-Specific Scanning
 
 ```bash
 # Run only JavaScript endpoint discovery
-python3 sqljet.py -u example.com --js-scan
+./sqljet -u example.com --js-scan
 
 # Run only login form detection
-python3 sqljet.py -u example.com --login-scan
+./sqljet -u example.com --login-scan
 
 # Run only POST request generation
-python3 sqljet.py -u example.com --post-scan
+./sqljet -u example.com --post-scan
 
 # Run only API endpoint discovery
-python3 sqljet.py -u example.com --api-scan
+./sqljet -u example.com --api-scan
 
 # Run all enhanced scans
-python3 sqljet.py -u example.com --full
+./sqljet -u example.com --full
 ```
 
 ### Database Enumeration
 
 ```bash
 # Enumerate databases
-python3 sqljet.py -u example.com --get-dbs
+./sqljet -u example.com --get-dbs
 
 # Enumerate tables from specific database
-python3 sqljet.py -u example.com --get-tables --db-name users
+./sqljet -u example.com --get-tables --db-name users
 
 # Enumerate columns from specific table
-python3 sqljet.py -u example.com --get-columns --db-name users --tbl-name accounts
+./sqljet -u example.com --get-columns --db-name users --tbl-name accounts
 
 # Dump table data
-python3 sqljet.py -u example.com --dump --db-name users --tbl-name accounts
+./sqljet -u example.com --dump --db-name users --tbl-name accounts
 ```
 
 ### Authentication and Proxy Options
 
 ```bash
 # Use HTTP authentication
-python3 sqljet.py -u example.com --auth-type basic --auth-cred "username:password"
+./sqljet -u example.com --auth-type basic --auth-cred "username:password"
 
 # Use a proxy
-python3 sqljet.py -u example.com --proxy "http://proxy.example.com:8080"
+./sqljet -u example.com --proxy "http://proxy.example.com:8080"
 
 # Use a proxy file (multiple proxies)
-python3 sqljet.py -u example.com --proxy-file proxies.txt
+./sqljet -u example.com --proxy-file proxies.txt
 
 # Set a custom cookie
-python3 sqljet.py -u example.com --cookie "session=123456"
+./sqljet -u example.com --cookie "session=123456"
 ```
 
 ## Full Command Reference
 
 ```
-Usage: sqljet.py [options]
+Usage: ./sqljet [options]
 
 Options:
   -h, --help            Show help message and exit
-  -u, --url DOMAIN      Target domain to scan
-  -l, --list DOMAIN_LIST
-                        File containing list of domains
+  -u, --url URL         Target domain or URL
+  -l, --list LIST       File containing list of URLs
   -o, --output OUTPUT   Output directory for results
   -up, --update         Update all required tools and dependencies
   --skip-recon          Skip reconnaissance phase
@@ -263,12 +281,9 @@ Enhanced Scanning Options:
   --api-scan            Extract and test API endpoints
 
 Database Enumeration Options:
-  --get-dbs             Get list of databases
-  --get-tables          Get tables from database
-  --get-columns         Get columns from table
-  --db-name DB_NAME     Database name to enumerate
-  --tbl-name TBL_NAME   Table name to enumerate
-  --col-name COL_NAME   Column name to enumerate
+  --dbs                 Get list of databases
+  --tables              Get tables from database
+  --columns             Get columns from table
   --dump                Dump table contents
 
 Authentication and Proxy Options:
@@ -279,6 +294,12 @@ Authentication and Proxy Options:
   --proxy-file PROXY_FILE
                         File containing proxies
   --timeout TIMEOUT     Timeout for requests (seconds)
+  
+AI Integration Options:
+  --ai                  Enable AI-enhanced scanning 
+  --ai-model MODEL      AI model to use (gpt-4, gpt-3.5-turbo)
+  --ai-key KEY          OpenAI API key
+  --nuclei              Use Nuclei with AI-powered detection
 ```
 
 ## License

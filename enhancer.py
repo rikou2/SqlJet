@@ -53,8 +53,14 @@ def get_random_user_agent(user_agents=None):
         user_agents = load_user_agents()
     return random.choice(user_agents) if user_agents else "Mozilla/5.0 (compatible; SqlJet/1.0)"
 
-# Global user agents list
-USER_AGENTS = load_user_agents()
+# Replace the immediate loading of user agents with a lazy-loading approach
+USER_AGENTS = None
+
+def get_user_agents():
+    global USER_AGENTS
+    if USER_AGENTS is None:
+        USER_AGENTS = load_user_agents()
+    return USER_AGENTS
 
 # --- API Endpoint Discovery ---
 
@@ -71,7 +77,7 @@ def extract_js_endpoints(url, output_file):
     """
     try:
         # Get the main page
-        headers = {'User-Agent': get_random_user_agent(USER_AGENTS)}
+        headers = {'User-Agent': get_random_user_agent(get_user_agents())}
         response = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
         if response.status_code != 200:
             print(f"[!] Failed to fetch {url}, status code: {response.status_code}")
@@ -109,7 +115,7 @@ def extract_js_endpoints(url, output_file):
         
         for js_url in js_files:
             try:
-                headers = {'User-Agent': get_random_user_agent(USER_AGENTS)}
+                headers = {'User-Agent': get_random_user_agent(get_user_agents())}
                 js_response = requests.get(js_url, headers=headers, timeout=20, allow_redirects=True)
                 if js_response.status_code == 200:
                     js_content = js_response.text
@@ -160,7 +166,7 @@ def find_login_forms(url, output_file):
     """
     try:
         # Get the main page
-        headers = {'User-Agent': get_random_user_agent(USER_AGENTS)}
+        headers = {'User-Agent': get_random_user_agent(get_user_agents())}
         response = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
         if response.status_code != 200:
             print(f"[!] Failed to fetch {url}, status code: {response.status_code}")
@@ -276,7 +282,7 @@ def detect_content_types(urls_file, output_dir):
             result = {'url': url, 'type': 'other'}
             try:
                 # Send HEAD request first to check content type
-                headers = {'User-Agent': get_random_user_agent(USER_AGENTS)}
+                headers = {'User-Agent': get_random_user_agent(get_user_agents())}
                 head_response = requests.head(url, headers=headers, timeout=20, allow_redirects=True)
                 content_type = head_response.headers.get('Content-Type', '').lower()
                 
@@ -368,7 +374,7 @@ def generate_post_requests(urls_file, output_file):
     def analyze_url(url):
         templates = []
         try:
-            headers = {'User-Agent': get_random_user_agent(USER_AGENTS)}
+            headers = {'User-Agent': get_random_user_agent(get_user_agents())}
             response = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
