@@ -176,11 +176,11 @@ def check_tools(required_tools=None, skip_recon=False):
     if required_tools is None:
         if skip_recon:
             # When skipping recon, subfinder is not required
-            required_tools = ["httpx", "sqlmap"]
+            required_tools = ["httpx", "sqlmap", "katana", "gau", "nuclei"]
         else:
-            required_tools = ["subfinder", "httpx", "sqlmap"]
+            required_tools = ["subfinder", "httpx", "sqlmap", "katana", "gau", "nuclei"]
     
-    optional_tools = ["waybackurls", "katana", "gau", "nuclei"]
+    optional_tools = ["waybackurls"]
     missing_tools = []
     versions = {}
     
