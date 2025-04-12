@@ -1,16 +1,16 @@
 # SqlJet Ai V1 - Advanced SQL Injection Discovery & Testing Tool
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.1-blue">
-  <img src="https://img.shields.io/badge/Python-3.8+-orange">
+  <img src="https://img.shields.io/badge/Version-1.0-blue">
+  <img src="https://img.shields.io/badge/Python-3.6+-orange">
   <img src="https://img.shields.io/badge/License-MIT-green">
 </p>
 
 <p align="center"><i>Copyright (c) 2024-2025 SqlJet Ai developers by R13</i></p>
 
-SqlJet Ai V1 is a comprehensive SQL injection detection and exploitation tool that automates the process of discovering SQL injection vulnerabilities across various endpoints including subdomains, APIs, and login forms. This tool is for educational purposes only - the developer is not responsible for any illegal use.
+SqlJet Ai is an open source penetration testing tool that automates the process of detecting and exploiting SQL injection vulnerabilities across various endpoints including subdomains, APIs, and login forms. This tool is for educational purposes only - the developer is not responsible for any illegal use.
 
-## ✨ Features
+## Features
 
 - **Single-Command Operation**: Run complete scans with just one command
 - **Fully Automated**: Zero user interaction required during scanning
@@ -22,32 +22,20 @@ SqlJet Ai V1 is a comprehensive SQL injection detection and exploitation tool th
 - **Intelligent Crawling**: Uses Katana to discover hidden injection points
 - **WAF Detection & Bypass**: Automatically detects WAFs and selects optimal tamper scripts
 - **Database Enumeration**: Automatically extracts database information from vulnerable endpoints
-- **Comprehensive Reporting**: Generates detailed reports of discovered vulnerabilities
 
-## 🔧 Installation
+## Installation
 
 ### Prerequisites for All Platforms
 
-- Python 3.8+
+- Python 3.6+
 - Go 1.17+ (for Katana and other tools)
-
-### Quick Installation (All Platforms)
-
-```bash
-# Clone the repository
-git clone https://github.com/rikou2/SqlJet.git
-cd SqlJet
-
-# Install Python dependencies
-pip install -r requirements.txt
-```
 
 ### Kali Linux
 
 ```bash
 # Clone the repository
-git clone https://github.com/rikou2/SqlJet.git
-cd SqlJet
+git clone https://github.com/rikou2/sqljet.git
+cd sqljet
 
 # Install Python dependencies
 pip3 install -r requirements.txt
@@ -76,8 +64,8 @@ apt update && apt install -y sqlmap
 brew install python3 go
 
 # Clone the repository
-git clone https://github.com/rikou2/SqlJet.git
-cd SqlJet
+git clone https://github.com/rikou2/sqljet.git
+cd sqljet
 
 # Install Python dependencies
 pip3 install -r requirements.txt
@@ -98,14 +86,14 @@ brew install sqlmap
 
 ### Windows
 
-1. Install Python 3.8+ from [python.org](https://www.python.org/downloads/windows/)
+1. Install Python 3.6+ from [python.org](https://www.python.org/downloads/windows/)
 2. Install Go from [golang.org](https://golang.org/dl/)
 3. Install Git from [git-scm.com](https://git-scm.com/downloads)
 
 ```powershell
 # Clone the repository
-git clone https://github.com/rikou2/SqlJet.git
-cd SqlJet
+git clone https://github.com/rikou2/sqljet.git
+cd sqljet
 
 # Install Python dependencies
 pip install -r requirements.txt
@@ -124,111 +112,111 @@ $env:Path += ";$($env:USERPROFILE)\go\bin"
 pip install sqlmap
 ```
 
-## 🚀 Usage
+## Usage
 
 ### Basic Commands
 
 ```bash
 # Run a basic scan against a domain
-python sqlsc.py -u example.com
+python3 sqljet.py -u example.com
 
 # Specify output directory
-python sqlsc.py -u example.com -o /path/to/output
+python3 sqljet.py -u example.com -o /path/to/output
 
 # Skip reconnaissance phase
-python sqlsc.py -u example.com --skip-recon
+python3 sqljet.py -u example.com --skip-recon
 
 # Scan using a file of pre-discovered vulnerable URLs
-python sqlsc.py --vulnerable-file vulnerable_urls.txt
+python3 sqljet.py --vulnerable-file vulnerable_urls.txt
 ```
 
 ### Advanced Options
 
 ```bash
 # Set SQLMap risk and level parameters
-python sqlsc.py -u example.com --risk 3 --level 5
+python3 sqljet.py -u example.com --risk 3 --level 5
 
 # Enable automatic WAF detection and bypass
-python sqlsc.py -u example.com --auto-waf
+python3 sqljet.py -u example.com --auto-waf
 
 # Customize SQLMap tamper scripts
-python sqlsc.py -u example.com --tamper "between,charencode,space2comment"
+python3 sqljet.py -u example.com --tamper "between,charencode,space2comment"
 
 # Set a custom timeout
-python sqlsc.py -u example.com --timeout 300
+python3 sqljet.py -u example.com --timeout 300
 
 # Limit maximum number of URLs to scan
-python sqlsc.py -u example.com --max-urls 500
+python3 sqljet.py -u example.com --max-urls 500
 ```
 
 ### Katana Crawler Options
 
 ```bash
 # Enable Katana crawler (enabled by default)
-python sqlsc.py -u example.com --katana
+python3 sqljet.py -u example.com --katana
 
 # Set Katana crawler depth
-python sqlsc.py -u example.com --katana-depth 5
+python3 sqljet.py -u example.com --katana-depth 5
 
 # Set Katana crawler timeout
-python sqlsc.py -u example.com --katana-timeout 600
+python3 sqljet.py -u example.com --katana-timeout 600
 ```
 
 ### Feature-Specific Scanning
 
 ```bash
 # Run only JavaScript endpoint discovery
-python sqlsc.py -u example.com --js-scan
+python3 sqljet.py -u example.com --js-scan
 
 # Run only login form detection
-python sqlsc.py -u example.com --login-scan
+python3 sqljet.py -u example.com --login-scan
 
 # Run only POST request generation
-python sqlsc.py -u example.com --post-scan
+python3 sqljet.py -u example.com --post-scan
 
 # Run only API endpoint discovery
-python sqlsc.py -u example.com --api-scan
+python3 sqljet.py -u example.com --api-scan
 
 # Run all enhanced scans
-python sqlsc.py -u example.com --full
+python3 sqljet.py -u example.com --full
 ```
 
 ### Database Enumeration
 
 ```bash
 # Enumerate databases
-python sqlsc.py -u example.com --get-dbs
+python3 sqljet.py -u example.com --get-dbs
 
 # Enumerate tables from specific database
-python sqlsc.py -u example.com --get-tables --db-name users
+python3 sqljet.py -u example.com --get-tables --db-name users
 
 # Enumerate columns from specific table
-python sqlsc.py -u example.com --get-columns --db-name users --tbl-name accounts
+python3 sqljet.py -u example.com --get-columns --db-name users --tbl-name accounts
 
 # Dump table data
-python sqlsc.py -u example.com --dump --db-name users --tbl-name accounts
+python3 sqljet.py -u example.com --dump --db-name users --tbl-name accounts
 ```
 
 ### Authentication and Proxy Options
 
 ```bash
 # Use HTTP authentication
-python sqlsc.py -u example.com --auth-type basic --auth-cred "username:password"
+python3 sqljet.py -u example.com --auth-type basic --auth-cred "username:password"
 
 # Use a proxy
-python sqlsc.py -u example.com --proxy "http://proxy.example.com:8080"
+python3 sqljet.py -u example.com --proxy "http://proxy.example.com:8080"
 
 # Use a proxy file (multiple proxies)
-python sqlsc.py -u example.com --proxy-file proxies.txt
+python3 sqljet.py -u example.com --proxy-file proxies.txt
 
 # Set a custom cookie
-python sqlsc.py -u example.com --cookie "session=123456"
+python3 sqljet.py -u example.com --cookie "session=123456"
 ```
 
-## 📋 Full Command Reference
+## Full Command Reference
 
 ```
-Usage: sqlsc.py [options]
+Usage: sqljet.py [options]
 
 Options:
   -h, --help            Show help message and exit
@@ -282,20 +270,10 @@ Authentication and Proxy Options:
   --timeout TIMEOUT     Timeout for requests (seconds)
 ```
 
-## 🔄 Recent Updates
-
-### Version 1.1 (April 2025)
-- Added comprehensive dependency management with requirements.txt
-- Improved WAF detection algorithm with enhanced bypass techniques
-- Fixed bugs related to parameter handling in nested URLs
-- Added support for more database types
-- Enhanced reporting with detailed CSV output
-- Performance improvements for large-scale scans
-
-## 📜 License
+## License
 
 This project is available under the MIT license.
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 SqlJet Ai is designed for educational purposes and legal penetration testing activities only. The developer is not responsible for any misuse or damage caused by this tool. Always ensure you have explicit permission before scanning any target that is not owned by you.

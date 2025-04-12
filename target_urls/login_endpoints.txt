@@ -1,0 +1,4 @@
+https://backoffice.winpax.com.ar/login
+https://pos.winpax.com.ar/login
+https://app.winpax.com.ar/login
+https://forms.winpax.com.ar/login

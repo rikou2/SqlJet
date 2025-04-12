@@ -9,10 +9,52 @@ import re
 import sys
 import json
 import time
+import random
+import tldextract
 import requests
 from urllib.parse import urlparse, parse_qs, urljoin
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
+from colorama import Fore, Style
+
+# User-Agent handling
+def load_user_agents(user_agent_file="useragents/user-agents.txt"):
+    """Load user agents from file"""
+    user_agents = []
+    try:
+        # Get full path if not absolute
+        if not os.path.isabs(user_agent_file):
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            user_agent_file = os.path.join(base_dir, user_agent_file)
+            
+        if os.path.exists(user_agent_file):
+            with open(user_agent_file, 'r') as f:
+                user_agents = [line.strip() for line in f if line.strip()]
+                print(f"[+] Loaded {len(user_agents)} user agents")
+        else:
+            print(f"[!] User agent file not found: {user_agent_file}")
+            # Fallback to some common user agents
+            user_agents = [
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0"
+            ]
+    except Exception as e:
+        print(f"[!] Error loading user agents: {str(e)}")
+        # Fallback
+        user_agents = ["Mozilla/5.0 (compatible; SqlJet/1.0; +http://example.com)"]
+        
+    return user_agents
+
+# Get a random user agent
+def get_random_user_agent(user_agents=None):
+    """Get a random user agent from the loaded list"""
+    if not user_agents:
+        user_agents = load_user_agents()
+    return random.choice(user_agents) if user_agents else "Mozilla/5.0 (compatible; SqlJet/1.0)"
+
+# Global user agents list
+USER_AGENTS = load_user_agents()
 
 # --- API Endpoint Discovery ---
 
@@ -29,7 +71,8 @@ def extract_js_endpoints(url, output_file):
     """
     try:
         # Get the main page
-        response = requests.get(url, timeout=10)
+        headers = {'User-Agent': get_random_user_agent(USER_AGENTS)}
+        response = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
         if response.status_code != 200:
             print(f"[!] Failed to fetch {url}, status code: {response.status_code}")
             return 0
@@ -66,7 +109,8 @@ def extract_js_endpoints(url, output_file):
         
         for js_url in js_files:
             try:
-                js_response = requests.get(js_url, timeout=10)
+                headers = {'User-Agent': get_random_user_agent(USER_AGENTS)}
+                js_response = requests.get(js_url, headers=headers, timeout=20, allow_redirects=True)
                 if js_response.status_code == 200:
                     js_content = js_response.text
                     
@@ -116,7 +160,8 @@ def find_login_forms(url, output_file):
     """
     try:
         # Get the main page
-        response = requests.get(url, timeout=10)
+        headers = {'User-Agent': get_random_user_agent(USER_AGENTS)}
+        response = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
         if response.status_code != 200:
             print(f"[!] Failed to fetch {url}, status code: {response.status_code}")
             return 0
@@ -231,7 +276,8 @@ def detect_content_types(urls_file, output_dir):
             result = {'url': url, 'type': 'other'}
             try:
                 # Send HEAD request first to check content type
-                head_response = requests.head(url, timeout=5)
+                headers = {'User-Agent': get_random_user_agent(USER_AGENTS)}
+                head_response = requests.head(url, headers=headers, timeout=20, allow_redirects=True)
                 content_type = head_response.headers.get('Content-Type', '').lower()
                 
                 # Check for JSON
@@ -242,7 +288,7 @@ def detect_content_types(urls_file, output_dir):
                     result['type'] = 'xml'
                 else:
                     # If not determined by header, try GET request
-                    response = requests.get(url, timeout=10)
+                    response = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
                     content = response.text
                     
                     # Check for JSON response
@@ -322,7 +368,8 @@ def generate_post_requests(urls_file, output_file):
     def analyze_url(url):
         templates = []
         try:
-            response = requests.get(url, timeout=10)
+            headers = {'User-Agent': get_random_user_agent(USER_AGENTS)}
+            response = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
                 

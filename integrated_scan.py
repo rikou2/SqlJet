@@ -9,11 +9,20 @@ import sys
 import time
 import json
 import shutil
+import requests
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs
 from katana_crawler import crawl_with_katana, filter_potential_sqli_urls
 
 # Import enhancer features
 from enhancer import extract_js_endpoints, find_login_forms, detect_content_types, generate_post_requests, enhance_scan
+
+# Try to import AI integration
+try:
+    from ai_integration import SqlJetAiIntegration, load_api_key
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
 
 # --- Color formatting ---
 def header(msg):
@@ -49,7 +58,7 @@ def run_integrated_scan(args, output_dir):
     """Run the integrated scanning workflow
     
     This function orchestrates the entire scanning process from reconnaissance to SQLMap scanning
-    including Katana crawling for automatic SQL injection point discovery
+    including Katana crawling for automatic SQL injection point discovery and AI-powered analysis
     
     SqlJet Ai V1 - Advanced SQL Injection Discovery & Testing Tool
     Copyright (c) 2024-2025 SqlJet Ai developers by r13
@@ -61,6 +70,27 @@ def run_integrated_scan(args, output_dir):
     Returns:
         dict: Results of the scan
     """
+    
+    # Initialize AI integration if requested
+    ai_integration = None
+    if getattr(args, 'ai', False) and AI_AVAILABLE:
+        try:
+            # Get API key from argument or environment
+            api_key = getattr(args, 'ai_key', None) or load_api_key()
+            if not api_key:
+                warning("AI scanning enabled but no API key provided. Set with --ai-key or OPENAI_API_KEY environment variable.")
+            else:
+                # Initialize AI integration
+                ai_model = getattr(args, 'ai_model', 'gpt-4')
+                # Check if SSL verification should be disabled
+                verify_ssl = not getattr(args, 'disable_ssl_verify', False)
+                ai_integration = SqlJetAiIntegration(api_key=api_key, model=ai_model, output_dir=output_dir, verify_ssl=verify_ssl)
+                success(f"AI-enhanced scanning enabled using {ai_model}")
+                if not verify_ssl:
+                    info("SSL certificate verification disabled for this scan")
+        except Exception as e:
+            error(f"Failed to initialize AI integration: {e}")
+            warning("Continuing scan without AI capabilities")
     domain = args.domain.replace('http://', '').replace('https://', '').split('/')[0]
     scan_start_time = time.time()
     
@@ -119,8 +149,48 @@ def run_integrated_scan(args, output_dir):
     with open(log_file, 'a') as f:
         f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Found {live_count} live URLs with parameters\n")
     
-    # --- PHASE 3: ENHANCED SCANNING ---
-    header("PHASE 3: ENHANCED ATTACK SURFACE DISCOVERY")
+    # --- PHASE 3: AI-POWERED ANALYSIS (if enabled) ---
+    if ai_integration is not None:
+        header("PHASE 3: AI-POWERED VULNERABILITY ANALYSIS")
+        
+        # Analyze the target domain for SQL injection vulnerabilities
+        target_url = f"http://{domain}" if not domain.startswith('http') else domain
+        info(f"Performing AI analysis of target: {target_url}")
+        
+        # Analyze the target domain
+        target_analysis = ai_integration.analyze_target(target_url)
+        
+        if 'error' not in target_analysis:
+            # Display vulnerability likelihood for parameters
+            if 'vulnerable_params' in target_analysis and target_analysis['vulnerable_params']:
+                success(f"AI analysis identified {len(target_analysis['vulnerable_params'])} potentially vulnerable parameters")
+                for param, score in target_analysis['vulnerable_params'].items():
+                    if score >= 7:
+                        print(f"  {Fore.RED if 'Fore' in globals() else ''}[HIGH] Parameter '{param}' - Score: {score}/10{Style.RESET_ALL if 'Style' in globals() else ''}")
+                    elif score >= 4:
+                        print(f"  {Fore.YELLOW if 'Fore' in globals() else ''}[MEDIUM] Parameter '{param}' - Score: {score}/10{Style.RESET_ALL if 'Style' in globals() else ''}")
+                    else:
+                        print(f"  {Fore.GREEN if 'Fore' in globals() else ''}[LOW] Parameter '{param}' - Score: {score}/10{Style.RESET_ALL if 'Style' in globals() else ''}")
+            
+            # Display recommended payloads
+            if 'recommended_payloads' in target_analysis and target_analysis['recommended_payloads']:
+                info("AI-recommended SQL injection payloads:")
+                for i, payload in enumerate(target_analysis['recommended_payloads'], 1):
+                    print(f"  {i}. {payload}")
+            
+            # Display WAF evasion techniques
+            if 'waf_evasion_techniques' in target_analysis and target_analysis['waf_evasion_techniques']:
+                info("AI-recommended WAF evasion techniques:")
+                for i, technique in enumerate(target_analysis['waf_evasion_techniques'], 1):
+                    print(f"  {i}. {technique}")
+            
+            with open(log_file, 'a') as f:
+                f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] AI analysis completed for {target_url}\n")
+        else:
+            warning(f"AI analysis error: {target_analysis.get('error', 'Unknown error')}")
+    
+    # --- PHASE 4: ENHANCED SCANNING ---
+    header("PHASE 4: ENHANCED ATTACK SURFACE DISCOVERY")
     
     js_endpoints = 0
     login_forms = 0
@@ -230,13 +300,45 @@ def run_integrated_scan(args, output_dir):
         # Use this as our target for SQLMap testing
         live_params_urls_file = combined_urls_file
     
-    # --- PHASE 4: SQLMAP SCANNING ---
-    header("PHASE 4: SQL INJECTION TESTING")
+    # --- PHASE 5: SQLMAP SCANNING ---
+    header("PHASE 5: SQL INJECTION TESTING")
     
     # Import the scan_with_sqlmap function from sqlsc
     from sqlsc import scan_with_sqlmap, run_dbs_enum
     
     sqlmap_start_time = time.time()
+    
+    # Prioritize URLs using AI if available
+    if ai_integration is not None and live_params_urls_file and os.path.exists(live_params_urls_file):
+        info("Using AI to prioritize discovered endpoints for SQL injection testing")
+        
+        # Read the discovered URLs
+        with open(live_params_urls_file, 'r') as f:
+            discovered_urls = [line.strip() for line in f.readlines()]
+        
+        if discovered_urls:
+            # Get base target URL
+            target_url = f"http://{domain}" if not domain.startswith('http') else domain
+            
+            # Use AI to prioritize endpoints
+            prioritized_urls = ai_integration.prioritize_endpoints(target_url, discovered_urls)
+            
+            # Create a new file with prioritized URLs
+            prioritized_urls_file = os.path.join(output_dir, "prioritized_urls.txt")
+            with open(prioritized_urls_file, 'w') as f:
+                for url in prioritized_urls:
+                    f.write(f"{url}\n")
+            
+            success(f"AI prioritized {len(prioritized_urls)} endpoints for testing")
+            info(f"Top 5 prioritized endpoints:")
+            for i, url in enumerate(prioritized_urls[:5], 1):
+                print(f"  {i}. {url}")
+            
+            # Use the prioritized URLs file for testing
+            live_params_urls_file = prioritized_urls_file
+            
+            with open(log_file, 'a') as f:
+                f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] AI prioritized {len(prioritized_urls)} endpoints for testing\n")
     
     # Run SQLMap scan
     info(f"Starting SQLMap scan on {live_params_urls_file}")
@@ -276,40 +378,75 @@ def run_integrated_scan(args, output_dir):
     if scan_results.get('vulnerable_found', False) and args.dbs:
         header("PHASE 5: DATABASE ENUMERATION")
         
-        if 'vulnerable_urls' in scan_results and scan_results['vulnerable_urls']:
-            # Write vulnerable URLs to a file
-            vulnerable_urls_file = os.path.join(output_dir, "vulnerable_urls.txt")
-            with open(vulnerable_urls_file, 'w') as f:
-                for url in scan_results['vulnerable_urls']:
-                    f.write(f"{url}\n")
-            
-            # Run database enumeration
-            info(f"Enumerating databases for {len(scan_results['vulnerable_urls'])} vulnerable URLs")
-            db_enum_results = run_dbs_enum(
-                vulnerable_urls_file,
+        # Run database enumeration for each vulnerable URL
+        for url in scan_results.get('vulnerable_urls', []):
+            info(f"Enumerating database for: {url}")
+            run_dbs_enum(
+                url,
                 output_dir,
-                tamper_scripts=args.tamper,
-                level=args.level,
-                risk=args.risk,
-                prefix=args.prefix,
-                suffix=args.suffix,
-                auth_type=args.auth_type,
-                auth_cred=args.auth_cred,
-                cookie=args.cookie,
-                proxy=args.proxy,
-                proxy_file=args.proxy_file,
-                threads=args.threads,
-                verbose=args.verbose,
-                return_dbs=True
+                get_dbs=args.dbs,
+                db_name=args.db_name,
+                get_tables=args.tables,
+                get_columns=args.columns,
+                tbl_name=args.tbl_name,
+                dump_data=args.dump,
+                tamper_scripts=args.tamper
             )
+    
+    # --- PHASE 7: AI ANALYSIS OF RESULTS (if enabled) ---
+    if ai_integration is not None and scan_results:
+        header("PHASE 7: AI ANALYSIS OF SCAN RESULTS")
+        
+        # Get the summary of vulnerable URLs
+        vulnerable_urls = scan_results.get('vulnerable_urls', [])
+        
+        if vulnerable_urls:
+            info(f"Performing AI analysis of {len(vulnerable_urls)} vulnerable endpoints")
             
-            if db_enum_results:
-                print(f"[+] Found {len(db_enum_results)} databases")
-                for db in db_enum_results:
-                    info(f"Database found: {db}")
+            # Analyze each vulnerable endpoint in detail
+            for url in vulnerable_urls:
+                try:
+                    # Extract parameters from URL
+                    parsed_url = urlparse(url)
+                    parameters = parse_qs(parsed_url.query)
+                    flat_params = {k: v[0] if len(v) == 1 else v for k, v in parameters.items()}
+                    
+                    # Get custom payloads for this specific endpoint
+                    param_names = list(flat_params.keys())
+                    if param_names:
+                        # Choose the first parameter for demonstration
+                        target_param = param_names[0]
+                        custom_payloads = ai_integration.generate_custom_payloads(
+                            url, 
+                            target_param, 
+                            db_type=scan_results.get('db_type'),
+                            waf_detected=scan_results.get('waf_detected', False)
+                        )
+                        
+                        if custom_payloads:
+                            success(f"AI generated {len(custom_payloads)} custom payloads for {url}")
+                            info("Top 3 custom payloads:")
+                            for i, payload in enumerate(custom_payloads[:3], 1):
+                                print(f"  {i}. {payload}")
+                except Exception as e:
+                    warning(f"Error during AI analysis of {url}: {e}")
+            
+            with open(log_file, 'a') as f:
+                f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] AI analysis of vulnerable endpoints completed\n")
+        else:
+            info("No vulnerable endpoints found for AI analysis")
     
     # --- GENERATE SUMMARY ---
     header("SCAN SUMMARY")
+    
+    # Ensure all file paths are defined before generating summary
+    # These might not be defined in all code paths
+    if 'js_endpoints_file' not in locals():
+        js_endpoints_file = os.path.join(output_dir, "js_endpoints.txt")
+    if 'login_forms_file' not in locals():
+        login_forms_file = os.path.join(output_dir, "login_forms.txt")
+    if 'post_templates_file' not in locals():
+        post_templates_file = os.path.join(output_dir, "post_templates.json")
     
     scan_end_time = time.time()
     total_duration = scan_end_time - scan_start_time
@@ -317,22 +454,62 @@ def run_integrated_scan(args, output_dir):
     # Create summary file
     summary_file = os.path.join(output_dir, "scan_summary.txt")
     with open(summary_file, 'w') as f:
-        f.write(f"SqlQ Comprehensive Scan Summary for {domain}\n")
-        f.write(f"{'='*50}\n")
+        f.write(f"SqlJet Ai V1 Comprehensive Scan Summary for {domain}\n")
+        f.write(f"{'='*60}\n")
         f.write(f"Scan started at: {datetime.fromtimestamp(scan_start_time).strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Scan completed at: {datetime.fromtimestamp(scan_end_time).strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Total scan duration: {total_duration/60:.2f} minutes\n\n")
         
+        # Include AI enhancement information if used
+        if ai_integration is not None:
+            f.write(f"AI-ENHANCED SCANNING INFORMATION\n")
+            f.write(f"{'='*60}\n")
+            f.write(f"AI Model used: {getattr(args, 'ai_model', 'gpt-4')}\n")
+            if ai_integration:
+                f.write(f"AI Capabilities: Parameter analysis, Endpoint prioritization, Response interpretation\n")
+                if getattr(args, 'ai_analyze_only', False):
+                    f.write(f"AI Mode: Analysis only (no automatic exploitation)\n")
+                else:
+                    f.write(f"AI Mode: Full integration (analysis and exploitation)\n")
+            f.write("\n")
+        
         f.write("RECONNAISSANCE RESULTS:\n")
-        f.write(f"- Subdomain enumeration: {sum(1 for _ in open(subdomains_file)) if os.path.exists(subdomains_file) else 0} subdomains found\n")
-        f.write(f"- URL discovery: {sum(1 for _ in open(all_urls_file)) if os.path.exists(all_urls_file) else 0} total URLs\n")
-        f.write(f"- Parameter URLs: {sum(1 for _ in open(filtered_params_urls_file)) if os.path.exists(filtered_params_urls_file) else 0} URLs with parameters\n")
-        f.write(f"- Live URLs: {sum(1 for _ in open(live_params_urls_file)) if os.path.exists(live_params_urls_file) else 0} live URLs tested\n\n")
+        # Only try to read files if they exist and are defined
+        if 'subdomains_file' in locals():
+            f.write(f"- Subdomain enumeration: {sum(1 for _ in open(subdomains_file)) if os.path.exists(subdomains_file) else 0} subdomains found\n")
+        else:
+            f.write(f"- Subdomain enumeration: Skipped\n")
+            
+        if 'all_urls_file' in locals():
+            f.write(f"- URL discovery: {sum(1 for _ in open(all_urls_file)) if os.path.exists(all_urls_file) else 0} total URLs\n")
+        else:
+            f.write(f"- URL discovery: Skipped\n")
+            
+        if 'filtered_params_urls_file' in locals():
+            f.write(f"- Parameter URLs: {sum(1 for _ in open(filtered_params_urls_file)) if os.path.exists(filtered_params_urls_file) else 0} URLs with parameters\n")
+        else:
+            f.write(f"- Parameter URLs: Skipped\n")
+            
+        if 'live_params_urls_file' in locals():
+            f.write(f"- Live URLs: {sum(1 for _ in open(live_params_urls_file)) if os.path.exists(live_params_urls_file) else 0} live URLs tested\n\n")
+        else:
+            f.write(f"- Live URLs: Skipped\n\n")
         
         f.write("ENHANCED SCANNING RESULTS:\n")
-        f.write(f"- JavaScript endpoints: {sum(1 for _ in open(js_endpoints_file)) if os.path.exists(js_endpoints_file) else 0} endpoints found\n")
-        f.write(f"- Login forms: {sum(1 for _ in open(login_forms_file)) if os.path.exists(login_forms_file) else 0} forms found\n")
-        if os.path.exists(post_templates_file):
+        # JS endpoints
+        if 'js_endpoints_file' in locals():
+            f.write(f"- JavaScript endpoints: {sum(1 for _ in open(js_endpoints_file)) if os.path.exists(js_endpoints_file) else 0} endpoints found\n")
+        else:
+            f.write(f"- JavaScript endpoints: Skipped\n")
+        
+        # Login forms
+        if 'login_forms_file' in locals():
+            f.write(f"- Login forms: {sum(1 for _ in open(login_forms_file)) if os.path.exists(login_forms_file) else 0} forms found\n")
+        else:
+            f.write(f"- Login forms: Skipped\n")
+        
+        # POST templates
+        if 'post_templates_file' in locals() and os.path.exists(post_templates_file):
             with open(post_templates_file, 'r') as ptf:
                 try:
                     post_templates = json.load(ptf)
@@ -340,7 +517,7 @@ def run_integrated_scan(args, output_dir):
                 except:
                     f.write(f"- POST templates: Error parsing file\n\n")
         else:
-            f.write(f"- POST templates: None generated\n\n")
+            f.write(f"- POST templates: Skipped\n\n")
         
         f.write("SQL INJECTION RESULTS:\n")
         f.write(f"- SQLMap scan duration: {sqlmap_duration/60:.2f} minutes\n")

@@ -1,0 +1,6 @@
+https://backoffice.winpax.com.ar
+https://backoffice.v2.winpax.com.ar
+https://pos.winpax.com.ar
+https://ms.booking.winpax.com.ar
+https://ms.reservations.winpax.com.ar
+https://app.winpax.com.ar

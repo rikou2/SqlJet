@@ -18,6 +18,13 @@ from urllib.parse import urlparse, parse_qs, urlencode, urlunparse, quote_plus
 import argparse
 import shutil
 
+# Import AI integration modules (will be skipped if not available)
+try:
+    from ai_integration import SqlJetAiIntegration, load_api_key, store_api_key
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+
 # Import colorama for cross-platform colored terminal text
 try:
     from colorama import init, Fore, Back, Style
@@ -25,17 +32,24 @@ try:
     COLORS_ENABLED = True
 except ImportError:
     # Create mock color objects if colorama is not installed
+    COLORS_ENABLED = False
     class MockColor:
         def __getattr__(self, name):
             return ''
     Fore = MockColor()
     Back = MockColor()
     Style = MockColor()
-    COLORS_ENABLED = False
+
+# Global dictionary to store absolute paths to various tools
+TOOL_PATHS = {}
 
 # Environment
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+# Set default ProjectDiscovery API key for Nuclei integration if not already set
+if not os.environ.get("PDCP_API_KEY"):
+    os.environ["PDCP_API_KEY"] = "caaece17-b50e-4270-8035-62c674979488"
 
 # --- Get Base Directory of the script ---
 # This helps locate sibling directories like 'tamper', 'results', etc.
@@ -125,27 +139,80 @@ def send_telegram(message, log_file=None):
         print(f"{Fore.YELLOW}[WARN] Telegram notification failed: {e}{Style.RESET_ALL}")
         return False
 
-def check_tools(required_tools=None):
-    """Check if required tools are installed
+# Initialize tool paths (called once early to ensure paths are available)
+def init_tool_paths():
+    """Initialize the global TOOL_PATHS dictionary with paths to required tools"""
+    global TOOL_PATHS
+    # Get home directory and path to go binaries
+    home_dir = os.path.expanduser("~")
+    go_bin_dir = os.path.join(home_dir, "go", "bin")
+    
+    # Define tool paths, preferring Go bin directory if tools exist there
+    TOOL_PATHS.update({
+        "subfinder": os.path.join(go_bin_dir, "subfinder") if os.path.exists(os.path.join(go_bin_dir, "subfinder")) else "subfinder",
+        "httpx": os.path.join(go_bin_dir, "httpx") if os.path.exists(os.path.join(go_bin_dir, "httpx")) else "httpx",
+        "sqlmap": "sqlmap",  # Usually installed via pip or system package
+        "gau": os.path.join(go_bin_dir, "gau") if os.path.exists(os.path.join(go_bin_dir, "gau")) else "gau",
+        "waybackurls": os.path.join(go_bin_dir, "waybackurls") if os.path.exists(os.path.join(go_bin_dir, "waybackurls")) else "waybackurls",
+        "katana": os.path.join(go_bin_dir, "katana") if os.path.exists(os.path.join(go_bin_dir, "katana")) else "katana",
+        "nuclei": os.path.join(go_bin_dir, "nuclei") if os.path.exists(os.path.join(go_bin_dir, "nuclei")) else "nuclei"
+    })
+
+# Initialize tool paths early
+init_tool_paths()
+
+def check_tools(required_tools=None, skip_recon=False):
+    """
+    Check if the required tools are installed and set their paths.
     
     Args:
         required_tools: List of tools to check, defaults to [subfinder, httpx, sqlmap]
-        optional_tools: List of tools that are optional
+        skip_recon: If True, reconnaissance tools (subfinder) are optional
         
     Returns:
-        Tuple of (success, missing_tools)
+        bool: True if all required tools are installed, False otherwise
     """
-    if required_tools is None:
-        required_tools = ["subfinder", "httpx", "sqlmap"]
     
-    # These tools are helpful but not required
-    optional_tools = ["waybackurls", "katana", "gau"]
-        
+    if required_tools is None:
+        if skip_recon:
+            # When skipping recon, subfinder is not required
+            required_tools = ["httpx", "sqlmap"]
+        else:
+            required_tools = ["subfinder", "httpx", "sqlmap"]
+    
+    optional_tools = ["waybackurls", "katana", "gau", "nuclei"]
     missing_tools = []
     versions = {}
     
     for tool in required_tools:
         try:
+            # Try to find the tool
+            if tool in ["subfinder", "httpx", "gau", "waybackurls", "katana", "nuclei"]:
+                # First check ~/go/bin explicitly
+                go_bin_path = os.path.join(os.path.expanduser("~"), "go", "bin", tool)
+                if os.path.exists(go_bin_path) and os.access(go_bin_path, os.X_OK):
+                    # Tool found in go/bin
+                    tool_path = go_bin_path
+                    print(f"[DEBUG] Found {tool} at {tool_path}")
+                else:
+                    # Try with which command as fallback
+                    which_proc = subprocess.run(["which", tool], capture_output=True, text=True)
+                    if which_proc.returncode == 0:
+                        # Tool found in PATH
+                        tool_path = which_proc.stdout.strip()
+                    else:
+                        missing_tools.append(tool)
+                        continue
+            else:
+                # Just check if tool exists
+                result = subprocess.run(["which", tool], capture_output=True, text=True)
+                if result.returncode == 0:
+                    tool_path = result.stdout.strip()
+                else:
+                    missing_tools.append(tool)
+                    continue
+            
+            # Check version
             if tool == "sqlmap":
                 # Special handling for sqlmap to get version
                 result = subprocess.run([tool, "--version"], capture_output=True, text=True)
@@ -158,27 +225,27 @@ def check_tools(required_tools=None):
                 else:
                     missing_tools.append(tool)
             else:
-                # Just check if tool exists
-                result = subprocess.run(["which", tool], capture_output=True, text=True)
-                if result.returncode == 0:
-                    versions[tool] = "found"
-                else:
-                    missing_tools.append(tool)
+                versions[tool] = "found"
         except Exception:
             missing_tools.append(tool)
             versions[tool] = "unknown version"
     
-    # Check optional tools and warn if missing
+    # Check for optional tools
     missing_optional = []
     for tool in optional_tools:
-        try:
-            result = subprocess.run(["which", tool], capture_output=True, text=True)
-            if result.returncode == 0:
-                versions[tool] = "found"
-            else:
-                missing_optional.append(tool)
-        except Exception:
+        # Check both go/bin and PATH
+        go_bin_path = os.path.join(os.path.expanduser("~"), "go", "bin", tool)
+        if os.path.exists(go_bin_path) and os.access(go_bin_path, os.X_OK):
+            # Tool found in go/bin
+            print(f"[DEBUG] Found optional tool {tool} at {go_bin_path}")
+            continue
+            
+        # Fallback to which command
+        check_result = subprocess.run(["which", tool], capture_output=True, text=True)
+        if check_result.returncode != 0:
             missing_optional.append(tool)
+        else:
+            versions[tool] = "found"
     
     if missing_tools:
         print(f"{Fore.RED}[ERROR] Missing required tools: {' '.join(missing_tools)}{Style.RESET_ALL}")
@@ -331,10 +398,11 @@ def collect_subdomains(domain, out_file, timeout=300, retry_count=2):
     Returns:
         bool: True if successful, False otherwise
     """
+    print(f"[+] Starting subdomain enumeration for {domain}")
     print(f"[*] Enumerating subdomains for {domain}...")
     
-    # Create command as list for better escaping
-    command = ["subfinder", "-d", domain, "-o", out_file]
+    # Create command as list for better escaping using absolute path if available
+    command = [TOOL_PATHS["subfinder"], "-d", domain, "-o", out_file]
     
     # Track start time for performance reporting
     start_time = time.time()
@@ -362,21 +430,21 @@ def collect_subdomains(domain, out_file, timeout=300, retry_count=2):
         return False
 
 def collect_urls(sub_file, out_file):
-    print("[*] Collecting URLs via gau...")
+    print("[*] Collecting URLs from multiple sources...")
     try:
-        with open(sub_file, 'r') as f_in, open(out_file, 'w') as f_out:
+        # Use a temporary file for each tool's output
+        gau_temp_file = f"{out_file}.gau.tmp"
+        waybackurls_temp_file = f"{out_file}.waybackurls.tmp"
+        url_count = 0
+        
+        # Run gau for URL discovery
+        print("[*] Collecting URLs via gau...")
+        with open(sub_file, 'r') as f_in, open(gau_temp_file, 'w') as f_out:
             # Start cat process
             cat_proc = subprocess.Popen(["cat", sub_file], stdout=subprocess.PIPE, text=True)
             
-            # Start gau process, taking input from cat
-            # Note: gau --threads is often deprecated/ignored; check `gau --help`
-            # If --o is supported by your gau version, it might be simpler:
-            # gau_command = ["gau", "--threads", "20", "--o", out_file]
-            # process = subprocess.run(gau_command, stdin=cat_proc.stdout, text=True, check=True)
-            # cat_proc.wait() # Wait for cat to finish
-            
-            # If --o isn't reliable or you prefer explicit piping:
-            gau_command = ["gau", "--threads", "20"]
+            # Run gau command with absolute path if available
+            gau_command = [TOOL_PATHS["gau"], "--threads", "20"]
             gau_proc = subprocess.Popen(gau_command, stdin=cat_proc.stdout, stdout=f_out, stderr=subprocess.PIPE, text=True)
             
             # Allow cat_proc to receive a SIGPIPE if gau_proc exits.
@@ -384,28 +452,118 @@ def collect_urls(sub_file, out_file):
             
             # Wait for gau to finish and capture stderr
             stderr_output = gau_proc.communicate()[1]
-            
-            # Check return codes
-            cat_retcode = cat_proc.wait()
+            cat_proc.wait()
             gau_retcode = gau_proc.returncode
             
-            if cat_retcode != 0:
-                 print(f"[WARN] cat process exited with code {cat_retcode} for file {sub_file}")
-                 # Continue anyway, maybe the file was empty?
-
             if gau_retcode == 0:
-                # Check if output file actually contains data
-                if os.path.getsize(out_file) > 0:
-                    print(f"[+] URL collection complete. Saved raw URLs to {out_file}")
-                    return True
+                if os.path.exists(gau_temp_file) and os.path.getsize(gau_temp_file) > 0:
+                    # Count lines/URLs found by gau
+                    with open(gau_temp_file, 'r') as f:
+                        gau_count = sum(1 for _ in f)
+                    success(f"Found {gau_count} URLs via gau")
+                    url_count += gau_count
                 else:
-                    print(f"[WARN] gau ran successfully but produced an empty output file: {out_file}")
-                    return False # Treat as failure if empty
+                    warning("gau ran successfully but found no URLs")
             else:
-                print(f"[ERROR] gau command failed with return code {gau_retcode}.")
+                warning(f"gau command failed with return code {gau_retcode}")
                 if stderr_output:
-                     print(f"Stderr: {stderr_output.strip()}")
-                return False
+                    print(f"Stderr: {stderr_output.strip()}")
+        
+        # Run waybackurls for URL discovery with a timeout
+        print("[*] Collecting URLs via waybackurls (with 60s timeout)...")
+        try:
+            with open(sub_file, 'r') as f_in, open(waybackurls_temp_file, 'w') as f_out:
+                # Start cat process
+                cat_proc = subprocess.Popen(["cat", sub_file], stdout=subprocess.PIPE, text=True)
+                
+                # Run waybackurls command with timeout and absolute path if available
+                wayback_command = [TOOL_PATHS["waybackurls"]]
+                wayback_proc = subprocess.Popen(wayback_command, stdin=cat_proc.stdout, stdout=f_out, stderr=subprocess.PIPE, text=True)
+                
+                # Allow cat_proc to receive a SIGPIPE if wayback_proc exits.
+                cat_proc.stdout.close()
+                
+                # Setup timeout monitoring
+                start_time = time.time()
+                wayback_retcode = None
+                stderr_output = ""
+                
+                # Wait for process with timeout
+                while wayback_retcode is None and time.time() - start_time < 60:  # 60 second timeout
+                    try:
+                        wayback_retcode = wayback_proc.wait(timeout=1)
+                        stderr_output = wayback_proc.stderr.read()
+                    except subprocess.TimeoutExpired:
+                        pass  # Continue waiting until our own timeout expires
+                        
+                # Kill process if it's still running after timeout
+                if wayback_retcode is None:
+                    warning("Waybackurls process timed out after 60 seconds, terminating")
+                    wayback_proc.terminate()
+                    try:
+                        wayback_proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        wayback_proc.kill()
+                    wayback_retcode = -1  # Indicate timeout
+                
+                cat_proc.wait(timeout=1)  # Brief timeout for cat process to finish
+        except Exception as e:
+            warning(f"Error during waybackurls process: {str(e)}")
+            wayback_retcode = -1
+            
+            if wayback_retcode == 0:
+                if os.path.exists(waybackurls_temp_file) and os.path.getsize(waybackurls_temp_file) > 0:
+                    # Count lines/URLs found by waybackurls
+                    with open(waybackurls_temp_file, 'r') as f:
+                        wayback_count = sum(1 for _ in f)
+                    success(f"Found {wayback_count} URLs via waybackurls")
+                    url_count += wayback_count
+                else:
+                    warning("waybackurls ran successfully but found no URLs")
+            else:
+                warning(f"waybackurls command failed with return code {wayback_retcode}")
+                if stderr_output:
+                    print(f"Stderr: {stderr_output.strip()}")
+        
+        # Combine results from both tools and remove duplicates
+        print("[*] Combining and deduplicating URLs from all sources...")
+        url_set = set()
+        
+        # Add URLs from gau if available
+        if os.path.exists(gau_temp_file) and os.path.getsize(gau_temp_file) > 0:
+            with open(gau_temp_file, 'r') as f:
+                for line in f:
+                    url = line.strip()
+                    if url:  # Skip empty lines
+                        url_set.add(url)
+        
+        # Add URLs from waybackurls if available
+        if os.path.exists(waybackurls_temp_file) and os.path.getsize(waybackurls_temp_file) > 0:
+            with open(waybackurls_temp_file, 'r') as f:
+                for line in f:
+                    url = line.strip()
+                    if url:  # Skip empty lines
+                        url_set.add(url)
+        
+        # Write the combined, deduplicated set of URLs to the output file
+        with open(out_file, 'w') as f_out:
+            for url in url_set:
+                f_out.write(f"{url}\n")
+        
+        # Clean up temporary files
+        for temp_file in [gau_temp_file, waybackurls_temp_file]:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+        
+        # Report success with URL count
+        if url_set:
+            unique_count = len(url_set)
+            success(f"URL collection complete. Found {url_count} total URLs, {unique_count} unique URLs after deduplication.")
+            success(f"Saved raw URLs to {out_file}")
+            return True
+        else:
+            warning(f"No URLs found from any source")
+            return False
 
     except FileNotFoundError as e:
         # Could be cat, gau, or the input/output files
@@ -439,8 +597,9 @@ def filter_urls(url_file, filtered_file):
 
 def check_live_urls(url_file, live_file):
     print("[*] Checking which URLs are live with httpx...")
+    # Fix the httpx command to use -list instead of -l (or use file input method) with absolute path
     command = [
-        "httpx", "-l", url_file,
+        TOOL_PATHS["httpx"], "-list", url_file,
         "-silent", "-status-code", "-mc", "200,201,204,301,302,307,308",
         "-threads", "50", 
         "-o", live_file
@@ -462,10 +621,19 @@ def check_live_urls(url_file, live_file):
         return 0
 
 def scan_with_sqlmap(live_urls_file, output_dir, tamper_scripts=None, level=1, risk=1, 
-                     threads=10, verbose=False, prefix=None, suffix=None, auth_type=None, 
-                     auth_cred=None, cookie=None, proxy=None, proxy_file=None, headers=None,
-                     auto_enum_dbs=True, get_dbs=True, get_tables=False, get_columns=False, dump_data=False,
-                     auto_waf=False, report_format=None, timeout=None):
+                  threads=10, prefix=None, suffix=None, auth_type=None, auth_cred=None, cookie=None, 
+                  proxy=None, proxy_file=None, verbose=False, headers=None, get_dbs=False, get_tables=False, 
+                  get_columns=False, dump_data=False, auto_enum_dbs=True, auto_waf=False, report_format=None, 
+                  timeout=None, verify_ssl=True):
+    # Check if the live_urls_file exists and is not empty
+    if not os.path.exists(live_urls_file) or os.path.getsize(live_urls_file) == 0:
+        warning(f"Live URLs file {live_urls_file} not found or empty. Creating a placeholder file.")
+        # If the file doesn't exist or is empty, create a placeholder file with a test URL
+        with open(live_urls_file, 'w') as f:
+            # Use domain from the output_dir as a fallback
+            domain = os.path.basename(output_dir).split('_')[0]
+            f.write(f"http://{domain}/?test=1\n")
+        info(f"Created placeholder file with test URL for {domain}")     
     """Runs SQLMap with specified options.
     
     Args:
@@ -561,7 +729,7 @@ def scan_with_sqlmap(live_urls_file, output_dir, tamper_scripts=None, level=1, r
         
         # Build command with proper argument formatting
         # Add --answers to automatically respond to all prompts with 'Y' for fully automatic operation
-        cmd = ["sqlmap", "-m", live_urls_file, "--batch", "--answers=Y", "--level", str(level), "--risk", str(risk),
+        cmd = [TOOL_PATHS["sqlmap"], "-m", live_urls_file, "--batch", "--answers=Y", "--level", str(level), "--risk", str(risk),
                "--threads", str(threads)]
         
         # Add options for database enumeration
@@ -671,19 +839,33 @@ def scan_with_sqlmap(live_urls_file, output_dir, tamper_scripts=None, level=1, r
                     vulnerable("SQLMap found potential vulnerabilities! Check the log.")
                     
                     # Parse log for vulnerable URLs and parameters
-                    for line in log_content.split('\n'):
-                        if "Parameter:" in line and "Type:" in line:
-                            # Try to extract the URL from nearby lines
-                            url_marker = "URL: "
-                            for i in range(-5, 0):  # Look at previous 5 lines
-                                try:
-                                    url_line_index = log_content.split('\n').index(line) + i
-                                    if url_line_index >= 0 and url_marker in log_content.split('\n')[url_line_index]:
-                                        url = log_content.split('\n')[url_line_index].split(url_marker)[1].strip()
-                                        vulnerable_urls.append(url)
-                                        break
-                                except (ValueError, IndexError):
-                                    continue
+                    url_pattern = re.compile(r"parameter '([^']+)' is (vulnerable|potentially vulnerable).*url='([^']+)'", re.IGNORECASE)
+                    vuln_params = []
+                    
+                    for line in stdout.decode('utf-8', errors='ignore').splitlines():
+                        url_match = url_pattern.search(line)
+                        if url_match:
+                            param, status, url = url_match.groups()
+                            
+                            # Store URL and parameter together for better reporting
+                            if url not in vulnerable_urls:
+                                vulnerable_urls.append(url)
+                                
+                            # Add parameter and URL information to vuln_params
+                            vuln_params.append((param, url, status))
+                    
+                    # Display vulnerable parameters and URLs in terminal
+                    if vuln_params:
+                        header("SQL INJECTION VULNERABILITIES DETECTED")
+                        print(f"{Fore.RED}{Style.BRIGHT}{'='*80}{Style.RESET_ALL}")
+                        print(f"{Fore.YELLOW}{'PARAMETER':<15} {'STATUS':<25} {'URL'}{Style.RESET_ALL}")
+                        print(f"{Fore.RED}{Style.BRIGHT}{'='*80}{Style.RESET_ALL}")
+                        
+                        for param, url, status in vuln_params:
+                            status_display = f"{status.upper()}"
+                            vulnerable(f"{param:<15} {status_display:<25} {url}")
+                            
+                        print(f"{Fore.RED}{Style.BRIGHT}{'='*80}{Style.RESET_ALL}")
                     
                     # Write vulnerable URLs to a file
                     if vulnerable_urls:
@@ -691,6 +873,19 @@ def scan_with_sqlmap(live_urls_file, output_dir, tamper_scripts=None, level=1, r
                         with open(vulnerable_urls_file, 'w') as f:
                             for url in vulnerable_urls:
                                 f.write(f"{url}\n")
+                                
+                        # Save detailed parameter information to a JSON file
+                        if vuln_params:
+                            vuln_details_file = os.path.join(output_dir, "vulnerability_details.json")
+                            vuln_details = [{
+                                "parameter": param,
+                                "url": url,
+                                "status": status
+                            } for param, url, status in vuln_params]
+                            
+                            with open(vuln_details_file, 'w') as f:
+                                json.dump(vuln_details, f, indent=2)
+                                
                         success(f"Found {len(vulnerable_urls)} vulnerable URLs, saved to {vulnerable_urls_file}")
                     
                     send_telegram(f"SQLMap found potential vulnerabilities for {live_urls_file}! Check log: {sqlmap_log_file}")
@@ -750,8 +945,8 @@ def run_dbs_enum(vulnerable_urls_file, output_dir, tamper_scripts=None, level=1,
     info(f"Starting database enumeration on {url_count} vulnerable URLs...")
     send_telegram(f"Starting automatic database enumeration on {url_count} vulnerable URLs.")
     
-    # Build sqlmap command for database enumeration
-    cmd = ["sqlmap", "-m", vulnerable_urls_file, "--batch", "--dbs"]
+    # Build sqlmap command for database enumeration using absolute path
+    cmd = [TOOL_PATHS["sqlmap"], "-m", vulnerable_urls_file, "--batch", "--dbs"]
     
     # Add options
     if level: cmd.extend(["--level", str(level)])
@@ -840,8 +1035,8 @@ def enum_tables_for_db(vulnerable_urls_file, output_dir, db_name, tamper_scripts
     info(f"Starting table enumeration for database: {db_name}")
     send_telegram(f"Starting table enumeration for database: {db_name}")
     
-    # Build sqlmap command for table enumeration
-    cmd = ["sqlmap", "-m", vulnerable_urls_file, "--batch", "--tables"]
+    # Build sqlmap command for table enumeration using absolute path
+    cmd = [TOOL_PATHS["sqlmap"], "-m", vulnerable_urls_file, "--batch", "--tables"]
     
     # Add database
     cmd.extend(["-D", db_name])
@@ -942,6 +1137,17 @@ if __name__ == "__main__":
     
     # SQLMap options
     parser.add_argument('--level', type=int, default=1, help='SQLMap detection level (1-5)')
+    
+    # AI integration options
+    parser.add_argument('--ai', action='store_true', help='Enable AI-enhanced scanning for better SQL injection detection')
+    parser.add_argument('--ai-model', default='gpt-4', choices=['gpt-4', 'gpt-3.5-turbo'], help='AI model to use for analysis')
+    parser.add_argument('--ai-key', help='OpenAI API key (can also be set via OPENAI_API_KEY environment variable)')
+    parser.add_argument('--store-ai-key', action='store_true', help='Securely store the provided API key for future use')
+    parser.add_argument('--ai-analyze-only', action='store_true', help='Only analyze target without performing actual injection tests')
+    parser.add_argument('--disable-ssl-verify', action='store_true', help='Disable SSL certificate verification (useful for sites with invalid/expired certificates)')
+    parser.add_argument('--nuclei', action='store_true', help='Use Nuclei with AI-powered detection for enhanced SQL injection scanning')
+    parser.add_argument('--pdcp-api-key', help='ProjectDiscovery API key for Nuclei AI scanning (can also be set via PDCP_API_KEY env var)')
+    parser.add_argument('--nuclei-katana', action='store_true', help='Run Nuclei AI scans on Katana crawler output for deeper vulnerability detection')
     parser.add_argument('--risk', type=int, default=1, help='SQLMap risk level (1-3)')
     parser.add_argument('--tamper', help='SQLMap tamper script(s)')
     parser.add_argument('--threads', type=int, default=10, help='Number of concurrent threads')
@@ -1011,6 +1217,8 @@ if __name__ == "__main__":
         try:
             # Import the integrated scanner
             from integrated_scan import run_integrated_scan
+            import ai_integration
+            import nuclei_integration
             
             # Display banner and disclaimer without asking for confirmation
             display_banner()
@@ -1026,7 +1234,7 @@ if __name__ == "__main__":
             print(f"{Fore.GREEN}[+] Running in fully automatic mode{Style.RESET_ALL}")
             
             # Check if required tools are installed
-            success, missing_tools = check_tools()
+            success, missing_tools = check_tools(skip_recon=args.skip_recon)
             if not success:
                 sys.exit(1)
                 
@@ -1041,9 +1249,11 @@ if __name__ == "__main__":
     # Skip confirmation in automatic mode
     print(f"{Fore.GREEN}[+] Running in fully automatic mode{Style.RESET_ALL}")
     
-    # ... rest of the code remains the same ...
+    # Initialize url_count to avoid the NameError later
+    url_count = 0
+        
     # Verify required tools
-    tools_ok, missing_tools = check_tools()
+    tools_ok, missing_tools = check_tools(skip_recon=args.skip_recon)
     if not tools_ok:
         sys.exit(1)
     
@@ -1101,9 +1311,84 @@ if __name__ == "__main__":
         
         # For direct scan, proceed to SQLMap immediately
         header("SQL INJECTION TESTING PHASE")
-        # Run SQLMap scan
-        sqlmap_start = time.time()
-        scan_results = scan_with_sqlmap(
+        
+        # Check if Nuclei scan is requested
+        verify_ssl = not args.disable_ssl_verify
+        nuclei_results = None
+        
+        if args.nuclei:
+            header("RUNNING NUCLEI AI-POWERED SQL INJECTION SCAN")
+            pdcp_api_key = args.pdcp_api_key or os.environ.get("PDCP_API_KEY")
+            # Make sure nuclei_integration module is imported
+            try:
+                import nuclei_integration
+                success("Nuclei integration loaded successfully")
+            except ImportError as e:
+                error(f"Failed to import nuclei_integration module: {e}")
+                warning("Please ensure nuclei_integration.py is in the same directory")
+                warning("Continuing with standard scan without Nuclei")
+                args.nuclei = False  # Disable nuclei flag since it can't be loaded
+            
+            if not pdcp_api_key and args.nuclei:
+                warning("No ProjectDiscovery API key provided. Set via --pdcp-api-key or PDCP_API_KEY environment variable.")
+                warning("Continuing without API key. Some Nuclei AI features may be limited.")
+            
+            if args.nuclei:  # Only proceed if we still have nuclei enabled
+                nuclei = nuclei_integration.NucleiIntegration(
+                    api_key=pdcp_api_key,
+                    output_dir=output_dir,
+                    verify_ssl=not getattr(args, 'disable_ssl_verify', False),
+                    debug=args.verbose,
+                    nuclei_path=TOOL_PATHS["nuclei"],
+                    katana_path=TOOL_PATHS["katana"]
+                )
+                
+                # Check if Nuclei is installed
+                if not nuclei.check_nuclei_installation():
+                    warning("Nuclei is not installed or not found in PATH")
+                    warning("Install Nuclei with: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest")
+                    warning("Continuing with standard scan without Nuclei")
+                    args.nuclei = False
+                else:
+                    success("Nuclei is installed and ready to use")
+                
+                # Run nuclei on Katana output if requested
+                if args.nuclei_katana and katana_output_file and os.path.exists(katana_output_file):
+                    info(f"Running Nuclei AI-powered scan on Katana crawler output")
+                    nuclei_results = nuclei.scan_katana_output(
+                        katana_file=katana_output_file,
+                        output_file=os.path.join(output_dir, "nuclei_katana_results.json")
+                    )
+                else:
+                    # Run nuclei directly on the target
+                    info(f"Running Nuclei AI-powered scan directly on target: {args.domain}")
+                    nuclei_results = nuclei.find_sql_injections(
+                        target=args.domain,
+                        output_file=os.path.join(output_dir, "nuclei_sqli_results.json")
+                    )
+                
+                if nuclei_results and nuclei_results.get("sql_injection_found", False):
+                    header("NUCLEI SQL INJECTION VULNERABILITIES DETECTED")
+                    print(f"{Fore.RED}{Style.BRIGHT}{'='*80}{Style.RESET_ALL}")
+                    print(f"{Fore.YELLOW}{'VULNERABILITY':<80}{Style.RESET_ALL}")
+                    print(f"{Fore.RED}{Style.BRIGHT}{'='*80}{Style.RESET_ALL}")
+                    
+                    for vuln in nuclei_results.get("vulnerabilities", []):
+                        vulnerable(vuln)
+                        
+                    # Save vulnerable URLs to file for sqlmap
+                    if live_params_urls_file:
+                        # Create new file with only Nuclei-discovered vulnerabilities
+                        with open(live_params_urls_file, 'w') as f:
+                            for vuln in nuclei_results.get("vulnerabilities", []):
+                                url_match = re.search(r'\[([^\]]+)\]', vuln)
+                                if url_match:
+                                    url = url_match.group(1)
+                                    f.write(f"{url}\n")
+                        success(f"Created new target file with {len(nuclei_results.get('vulnerabilities', []))} Nuclei-discovered vulnerable URLs")
+        
+        # Direct SQLMap scan with SQLJet
+        sqlmap_result = scan_with_sqlmap(
             live_params_urls_file,
             output_dir,
             tamper_scripts=args.tamper,
@@ -1235,8 +1520,8 @@ if __name__ == "__main__":
         else:
             msg = f"Scan completed for {domain}, but no live URLs with parameters were found."
             print(f"[-] {msg}")
-            send_telegram(msg, log_file)
+            send_telegram(msg)
     else:
         msg = f"Scan completed for {domain}, but no URLs with parameters were found."
         print(f"[-] {msg}")
-        send_telegram(msg, log_file)
+        send_telegram(msg)

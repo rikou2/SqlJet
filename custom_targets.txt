@@ -1,0 +1,5 @@
+backoffice.winpax.com.ar
+pos.winpax.com.ar
+ms.booking.winpax.com.ar
+app.winpax.com.ar
+forms.winpax.com.ar
