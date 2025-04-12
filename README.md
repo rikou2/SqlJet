@@ -162,6 +162,16 @@ python3 sqljet.py -u example.com --katana-depth 5
 python3 sqljet.py -u example.com --katana-timeout 600
 ```
 
+### Tool Management
+
+```bash
+# Update all required tools (subfinder, httpx, katana, gau, nuclei) and Python dependencies
+python3 sqljet.py -up
+
+# Same as above with long-form argument
+python3 sqljet.py --update
+```
+
 ### Feature-Specific Scanning
 
 ```bash
@@ -224,6 +234,7 @@ Options:
   -l, --list DOMAIN_LIST
                         File containing list of domains
   -o, --output OUTPUT   Output directory for results
+  -up, --update         Update all required tools and dependencies
   --skip-recon          Skip reconnaissance phase
   --max-urls MAX_URLS   Maximum number of URLs to scan
   --vulnerable-file VULNERABLE_FILE

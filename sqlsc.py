@@ -1112,15 +1112,68 @@ def enum_tables_for_db(vulnerable_urls_file, output_dir, db_name, tamper_scripts
         else:
             warning(f"No tables found in database {db_name} or enumeration was incomplete.")
             send_telegram(f"Table enumeration completed for database {db_name}, but no tables were found.")
-    
     except Exception as e:
         error(f"Error parsing table enumeration results: {e}")
-if __name__ == "__main__":
-    # Parse command line arguments
+
+def update_tools():
+    """
+    Update all required Go-based tools using 'go install' command and Python dependencies
+    """
+    print(f"{Fore.CYAN}[*] Updating required tools...{Style.RESET_ALL}")
+    
+    go_tools = {
+        "subfinder": "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
+        "httpx": "github.com/projectdiscovery/httpx/cmd/httpx@latest",
+        "katana": "github.com/projectdiscovery/katana/cmd/katana@latest",
+        "gau": "github.com/lc/gau/v2/cmd/gau@latest",
+        "nuclei": "github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest",
+        "waybackurls": "github.com/tomnomnom/waybackurls@latest"
+    }
+    
+    success_count = 0
+    failed_tools = []
+    
+    for tool_name, repo_path in go_tools.items():
+        print(f"{Fore.CYAN}[*] Updating {tool_name}...{Style.RESET_ALL}")
+        try:
+            result = subprocess.run(["go", "install", repo_path], 
+                                   capture_output=True, 
+                                   text=True, 
+                                   check=False)
+            
+            if result.returncode == 0:
+                success_count += 1
+                print(f"{Fore.GREEN}[+] Successfully updated {tool_name}{Style.RESET_ALL}")
+            else:
+                failed_tools.append(tool_name)
+                print(f"{Fore.RED}[!] Failed to update {tool_name}: {result.stderr}{Style.RESET_ALL}")
+        except Exception as e:
+            failed_tools.append(tool_name)
+            print(f"{Fore.RED}[!] Error updating {tool_name}: {str(e)}{Style.RESET_ALL}")
+    
+    # Also update pip packages
+    print(f"{Fore.CYAN}[*] Updating Python dependencies...{Style.RESET_ALL}")
+    try:
+        subprocess.run(["pip", "install", "-r", "requirements.txt", "--upgrade"], 
+                       capture_output=True, 
+                       text=True, 
+                       check=False)
+        print(f"{Fore.GREEN}[+] Successfully updated Python dependencies{Style.RESET_ALL}")
+    except Exception as e:
+        print(f"{Fore.RED}[!] Error updating Python dependencies: {str(e)}{Style.RESET_ALL}")
+    
+    print(f"{Fore.GREEN}[+] Update complete! Updated {success_count}/{len(go_tools)} tools successfully.{Style.RESET_ALL}")
+    if failed_tools:
+        print(f"{Fore.YELLOW}[!] Failed to update: {', '.join(failed_tools)}{Style.RESET_ALL}")
+
+def main():
     parser = argparse.ArgumentParser(description='SqlJet Ai V1 - Advanced SQL Injection Discovery & Testing Tool')
-    parser.add_argument('-u', '--url', dest='domain', help='Target domain to scan')
-    parser.add_argument('-l', '--list', dest='domain_list', help='File containing list of domains')
-    parser.add_argument('-o', '--output', help='Output directory for results')
+    
+    # Basic options
+    parser.add_argument("-u", "--url", help="Target domain or URL")
+    parser.add_argument("-l", "--list", help="File containing list of URLs")
+    parser.add_argument("-o", "--output", help="Output directory")
+    parser.add_argument("-up", "--update", action="store_true", help="Update all required tools")
     parser.add_argument('--katana', action='store_true', default=True, help='Use Katana crawler to find potential SQL injection points')
     parser.add_argument('--katana-depth', type=int, default=3, help='Katana crawler depth (default: 3)')
     parser.add_argument('--katana-timeout', type=int, default=300, help='Katana crawler timeout in seconds (default: 300)')
@@ -1177,6 +1230,14 @@ if __name__ == "__main__":
     parser.add_argument('--timeout', type=int, help='Timeout for requests (seconds)')
     
     args = parser.parse_args()
+    
+    # Initialize colorama
+    init(autoreset=True)
+    
+    # Handle tool updates if requested
+    if args.update:
+        update_tools()
+        sys.exit(0)
     
     # Validate arguments
     if not args.domain and not args.vulnerable_file:
