@@ -20,7 +20,7 @@ SqlJet Ai is an open source penetration testing tool that automates the process 
   - Login forms
   - POST requests
 - **Intelligent Crawling**: Uses Katana to discover hidden injection points
-- **WAF Detection & Bypass**: Automatically detects WAFs and selects optimal tamper scripts
+- **Advanced WAF Detection & Bypass**: Integrated with WAFW00F to accurately identify WAFs and automatically select optimal tamper scripts
 - **Database Enumeration**: Automatically extracts database information from vulnerable endpoints
 
 ## Installation
@@ -36,6 +36,9 @@ SqlJet Ai is an open source penetration testing tool that automates the process 
 # Clone the repository
 git clone https://github.com/rikou2/sqljet.git
 cd sqljet
+
+# Clone WAFW00F for WAF detection
+git clone https://github.com/EnableSecurity/wafw00f.git
 
 # Install Python dependencies
 pip3 install -r requirements.txt
@@ -67,6 +70,9 @@ brew install python3 go
 git clone https://github.com/rikou2/sqljet.git
 cd sqljet
 
+# Clone WAFW00F for WAF detection
+git clone https://github.com/EnableSecurity/wafw00f.git
+
 # Install Python dependencies
 pip3 install -r requirements.txt
 
@@ -94,6 +100,9 @@ brew install sqlmap
 # Clone the repository
 git clone https://github.com/rikou2/sqljet.git
 cd sqljet
+
+# Clone WAFW00F for WAF detection
+git clone https://github.com/EnableSecurity/wafw00f.git
 
 # Install Python dependencies
 pip install -r requirements.txt
@@ -155,7 +164,7 @@ The new CLI interface offers the same functionality as the original command but 
 # Set SQLMap risk and level parameters
 ./sqljet -u example.com --risk 3 --level 5
 
-# Enable automatic WAF detection and bypass
+# Enable automatic WAF detection and bypass with WAFW00F
 ./sqljet -u example.com --auto-waf
 
 # Customize SQLMap tamper scripts
@@ -214,13 +223,13 @@ The new CLI interface offers the same functionality as the original command but 
 
 ```bash
 # Enumerate databases
-./sqljet -u example.com --get-dbs
+./sqljet -u example.com --dbs
 
 # Enumerate tables from specific database
-./sqljet -u example.com --get-tables --db-name users
+./sqljet -u example.com --tables --db-name users
 
 # Enumerate columns from specific table
-./sqljet -u example.com --get-columns --db-name users --tbl-name accounts
+./sqljet -u example.com --columns --db-name users --tbl-name accounts
 
 # Dump table data
 ./sqljet -u example.com --dump --db-name users --tbl-name accounts
@@ -240,6 +249,28 @@ The new CLI interface offers the same functionality as the original command but 
 
 # Set a custom cookie
 ./sqljet -u example.com --cookie "session=123456"
+```
+
+## WAF Detection and Bypass
+
+SqlJet Ai includes advanced WAF (Web Application Firewall) detection capabilities powered by [WAFW00F](https://github.com/EnableSecurity/wafw00f). This integration allows SqlJet to:
+
+1. Accurately identify over 150 different WAF products
+2. Automatically select the most effective tamper scripts for the specific WAF
+3. Improve SQL injection success rates against protected targets
+
+When using the `--auto-waf` option, SqlJet will:
+- First attempt to detect the WAF using WAFW00F's advanced fingerprinting
+- Select custom tamper scripts tailored to the specific WAF product
+- Fall back to traditional detection methods if WAFW00F is not available
+
+Example usage:
+```bash
+# Scan with automatic WAF detection and bypass
+./sqljet -u example.com --auto-waf
+
+# Combine with other options for comprehensive testing
+./sqljet -u example.com --auto-waf --full --level 3
 ```
 
 ## Full Command Reference

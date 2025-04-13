@@ -3,7 +3,8 @@
 # -----------------------------------------
 # Atlas Integration - WAF detection and tamper script suggester
 # Based on the Atlas tool by M'hamed ("m4ll0k") Outaadi
-# Integrated with SqlQ by PCRY
+# Integrated with SqlJet by PCRY
+# Enhanced with WAFW00F integration
 # -----------------------------------------
 
 import os
@@ -14,6 +15,15 @@ import requests
 import random
 import urllib.parse
 from typing import Dict, List, Tuple, Union, Optional
+
+# Try to import WAFW00F integrator
+try:
+    from wafw00f_integrator import detect_and_select_tampers, WAFW00F_AVAILABLE
+    WAFW00F_INTEGRATION = True
+    print("[+] WAFW00F integration available for enhanced WAF detection")
+except ImportError:
+    WAFW00F_INTEGRATION = False
+    print("[!] WAFW00F integration not available. Using basic WAF detection.")
 
 # Common WAF signatures - Expanded with many more WAF types
 WAF_SIGNATURES = {
@@ -203,19 +213,28 @@ def detect_waf(url: str, headers: Optional[Dict] = None) -> Dict:
         ValueError: For invalid URL formats
         TimeoutError: If the request times out
     """
-    """
-    Detect if a URL is protected by a WAF by sending test payloads and analyzing the response.
+    # First check if WAFW00F integration is available
+    if WAFW00F_INTEGRATION:
+        try:
+            # Use WAFW00F for better WAF detection
+            result = detect_and_select_tampers(url, proxy=None, verbose=False)
+            if result["waf_detected"]:
+                print(f"[WAF] WAFW00F detected: {result['waf_name']}")
+                return {
+                    "detected": True,
+                    "waf_name": result["waf_name"],
+                    "tampers": result["tamper_scripts"]
+                }
+            else:
+                print("[WAF] No WAF detected by WAFW00F, falling back to traditional detection")
+        except Exception as e:
+            print(f"[WAF] Error using WAFW00F: {e}")
+            print("[WAF] Falling back to traditional detection")
     
-    Args:
-        url: The URL to test
-        headers: Optional custom headers for the request
-        
-    Returns:
-        Dictionary with WAF detection results 
-    """
+    # Traditional WAF detection as fallback
     if headers is None:
         headers = {
-            'User-Agent': f'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SqlQ WAF Detector/1.0'
+            'User-Agent': f'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SqlJet WAF Detector/1.0'
         }
     
     # Check if URL has parameters
@@ -392,67 +411,76 @@ def find_best_tampers(url: str, method: str = 'GET', data: str = None,
         ConnectionError: If the connection fails after max retries
         ValueError: For invalid input parameters
     """
-    """
-    Find the best tamper scripts to bypass WAF for a specific URL
+    print(f"[*] Finding best WAF bypass techniques for {url}")
     
-    Args:
-        url: Target URL with parameters
-        method: HTTP method (GET or POST)
-        data: POST data (if method is POST)
-        headers: Custom headers for the request
-        timeout: Request timeout in seconds
-        
-    Returns:
-        List of tamper scripts recommended for bypassing WAF
-    """
-    print("[*] Detecting WAF and recommending tamper scripts...")
-    waf_results = detect_waf(url, headers)
+    # Use WAFW00F integration if available (preferred method)
+    if WAFW00F_INTEGRATION:
+        try:
+            # Use WAFW00F for better detection and tamper script selection
+            result = detect_and_select_tampers(url, proxy=None, verbose=True)
+            if result["waf_name"] != "None":
+                print(f"[+] WAFW00F identified: {result['waf_name']} ({result['waf_manufacturer']})")
+                print(f"[+] Recommended tamper scripts: {', '.join(result['tamper_scripts'])}")
+                return result["tamper_scripts"]
+        except Exception as e:
+            print(f"[!] Error using WAFW00F integration: {e}")
+            print("[!] Falling back to traditional detection")
     
-    if waf_results["detected"]:
-        print(f"[+] WAF detected: {waf_results['waf_name']}")
-        print(f"[+] Recommended tamper scripts: {', '.join(waf_results['tampers'])}")
+    # Use traditional detection as fallback
+    waf_result = detect_waf(url, headers)
+    
+    if waf_result["detected"]:
+        print(f"[+] WAF detected: {waf_result['waf_name']}")
+        print(f"[+] Recommended tamper scripts: {', '.join(waf_result['tampers'])}")
+        return waf_result["tampers"]
     else:
-        print("[-] No WAF detected or could not confirm WAF presence")
-        print(f"[+] Generic tamper scripts: {', '.join(waf_results['tampers'])}")
-    
-    return waf_results["tampers"]
+        print("[!] No WAF detected, using generic tamper scripts")
+        return GENERIC_TAMPERS
 
 
 def sqlmap_with_tampers(url: str, output_dir: str, tampers: List[str], 
                         sqlmap_options: Dict = None) -> str:
     """
-    Run SQLMap with suitable tamper scripts
+    Run SQLMap with the specified tamper scripts
     
     Args:
         url: Target URL
-        output_dir: Output directory for results
-        tampers: List of tamper scripts to try
+        output_dir: Output directory for SQLMap results
+        tampers: List of tamper scripts to use
         sqlmap_options: Additional SQLMap options
         
     Returns:
-        SQLMap command to execute
+        SQLMap command string
     """
+    # Ensure sqlmap_options is a dictionary
     if sqlmap_options is None:
         sqlmap_options = {}
     
-    # Combine tamper scripts
-    tamper_str = ",".join(tampers)
+    # Build tamper script string
+    tamper_string = ",".join(tampers)
     
-    # Build SQLMap command
-    command = ["sqlmap", "-u", url, "--tamper", tamper_str, "--batch"]
+    # Build sqlmap command
+    sqlmap_cmd = [
+        "sqlmap",
+        "-u", url,
+        "--tamper", tamper_string,
+        "--batch",
+        "--output-dir", output_dir
+    ]
     
-    # Add output directory
-    command.extend(["--output-dir", output_dir])
-    
-    # Add other options
+    # Add additional options
     for option, value in sqlmap_options.items():
-        if value is True:
-            command.append(f"--{option}")
-        elif value not in [False, None]:
-            command.extend([f"--{option}", str(value)])
+        if isinstance(value, bool) and value:
+            sqlmap_cmd.append(f"--{option}")
+        elif value is not None and not isinstance(value, bool):
+            sqlmap_cmd.append(f"--{option}={value}")
     
-    # Return the command as a string
-    return " ".join(command)
+    # Convert to string for logging purposes
+    sqlmap_cmd_str = " ".join(sqlmap_cmd)
+    print(f"[+] SQLMap command: {sqlmap_cmd_str}")
+    
+    # Return the command string
+    return sqlmap_cmd_str
 
 
 if __name__ == "__main__":

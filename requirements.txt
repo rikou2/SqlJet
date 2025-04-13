@@ -11,3 +11,5 @@ pycparser>=2.21
 idna>=3.4
 certifi>=2022.9.24
 charset-normalizer>=2.1.1
+# WAFW00F dependencies
+pluginbase>=1.0.0
